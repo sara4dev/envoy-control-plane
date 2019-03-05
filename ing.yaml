@@ -1,0 +1,16 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  labels:
+    name: hello-envoy-ingress
+  name: hello-envoy-ingress
+  namespace: kube-system
+spec:
+  rules:
+    - host: hello-envoy.us-central-1.core.k8s.tgt
+      http:
+        paths:
+          - backend:
+              serviceName: hello-envoy-service
+              servicePort: 80
+            path: /
