@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2"
+	"github.com/envoyproxy/go-control-plane/envoy/api/v2/auth"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/endpoint"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/listener"
@@ -164,7 +165,6 @@ func makeEnvoyClustersAndEndpoints() ([]envoycache.Resource, []envoycache.Resour
 				envoyClusters = makeEnvoyClusters(service, servicePort, grpcServices, envoyClusters)
 
 				//TODO fix the endpoints part
-
 				envoyEndpoints = makeEnvoyEndpoints(servicePort, service, envoyEndpoints)
 			}
 		}
@@ -228,8 +228,38 @@ func makeEnvoyEndpoints(servicePort v1.ServicePort, service *v1.Service, envoyEn
 	return envoyEndpoints
 }
 
+func getDefaultTLS() *auth.TlsCertificate {
+	defaultTLS, err := clientSet.CoreV1().RESTClient().Get().Namespace("kube-system").Resource("secrets").Name("haproxy-ingress-np-tls-secret").Do().Get()
+	if err != nil {
+		log.Fatal("Error in finding default secrets")
+	}
+	defaultTLSSecret := defaultTLS.(*v1.Secret)
+	tlsCertificate := auth.TlsCertificate{
+		CertificateChain: &core.DataSource{
+			Specifier: &core.DataSource_InlineBytes{
+				InlineBytes: []byte(defaultTLSSecret.Data["tls.crt"]),
+			},
+		},
+		PrivateKey: &core.DataSource{
+			Specifier: &core.DataSource_InlineBytes{
+				InlineBytes: []byte(defaultTLSSecret.Data["tls.key"]),
+			},
+		},
+	}
+
+	return &tlsCertificate
+}
+
 func makeEnvoyListeners() []envoycache.Resource {
 	envoyListeners := []envoycache.Resource{}
+
+	tls := &auth.DownstreamTlsContext{}
+	//if cert != "" && key != "" {
+	tls.CommonTlsContext = &auth.CommonTlsContext{
+		TlsCertificates: []*auth.TlsCertificate{
+			getDefaultTLS(),
+		},
+	}
 
 	virtualHosts := []route.VirtualHost{}
 	virtualHostsMap := make(map[string]route.VirtualHost)
@@ -254,6 +284,7 @@ func makeEnvoyListeners() []envoycache.Resource {
 	if err != nil {
 		log.Fatal("Error in converting connection manager")
 	}
+
 	envoyListener := &v2.Listener{
 		Name: "http",
 		Address: core.Address{
@@ -281,6 +312,36 @@ func makeEnvoyListeners() []envoycache.Resource {
 		},
 	}
 	envoyListeners = append(envoyListeners, envoyListener)
+
+	envoyListener = &v2.Listener{
+		Name: "https",
+		Address: core.Address{
+			Address: &core.Address_SocketAddress{
+				SocketAddress: &core.SocketAddress{
+					Address: "0.0.0.0",
+					PortSpecifier: &core.SocketAddress_PortValue{
+						PortValue: 443,
+					},
+				},
+			},
+		},
+		//TODO fix the route part
+		FilterChains: []listener.FilterChain{
+			{
+				TlsContext: tls,
+				Filters: []listener.Filter{
+					{
+						Name: util.HTTPConnectionManager,
+						ConfigType: &listener.Filter_Config{
+							Config: httpConfig,
+						},
+					},
+				},
+			},
+		},
+	}
+	envoyListeners = append(envoyListeners, envoyListener)
+
 	return envoyListeners
 }
 

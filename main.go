@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	clientSet, err := newKubeClient("/Users/z0027kp/.kube/config")
+	clientSet, err = newKubeClient("/Users/z0027kp/.kube/config")
 	if err != nil {
 		log.Fatal("error")
 	}

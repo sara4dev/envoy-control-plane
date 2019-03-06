@@ -14,6 +14,7 @@ import (
 )
 
 var (
+	clientSet            kubernetes.Interface
 	resyncPeriod         time.Duration
 	signal               chan struct{}
 	ingressK8sCacheStore k8scache.Store
@@ -22,6 +23,7 @@ var (
 	nodeK8sController    k8scache.Controller
 	serviceK8sCacheStore k8scache.Store
 	serviceK8sController k8scache.Controller
+	err                  error
 )
 
 func watchIngresses(watchlist *k8scache.ListWatch, resyncPeriod time.Duration) k8scache.Store {
