@@ -254,59 +254,41 @@ func makeEnvoyListeners() []envoycache.Resource {
 	envoyListeners := []envoycache.Resource{}
 
 	tls := &auth.DownstreamTlsContext{}
-	//if cert != "" && key != "" {
 	tls.CommonTlsContext = &auth.CommonTlsContext{
-		TlsCertificates: []*auth.TlsCertificate{
-			getTLSData("kube-system", "vanitysampleappsecret"),
-			//getTLSData("kube-system","haproxy-ingress-np-tls-secret"),
-		},
+		TlsCertificates: []*auth.TlsCertificate{},
 	}
 
-	virtualHosts := []route.VirtualHost{}
-	virtualHostsMap := make(map[string]route.VirtualHost)
+	//virtualHosts := []route.VirtualHost{}
+	listenerFilerChains := []listener.FilterChain{}
+	//virtualHostsMap := make(map[string]route.VirtualHost)
+	listenerFilerChainsMap := make(map[string]listener.FilterChain)
 	for _, obj := range ingressK8sCacheStore.List() {
 		ingress := obj.(*extbeta1.Ingress)
 
-		//for _, tlsCerts := range ingress.Spec.TLS {
-		//	if tlsCerts.SecretName != "" {
-		//		tls.CommonTlsContext.TlsCertificates = append(tls.CommonTlsContext.TlsCertificates, getTLSData(ingress.Namespace, tlsCerts.SecretName))
-		//	}
-		//}
-
-		for _, ingressRule := range ingress.Spec.Rules {
-			virtualHost := makeVirtualHost(ingress.Namespace, ingressRule)
-			existingVirtualHost := virtualHostsMap[virtualHost.Domains[0]]
-			if existingVirtualHost.Name != "" {
-				existingVirtualHost.Routes = append(existingVirtualHost.Routes, virtualHost.Routes...)
+		for _, tlsCerts := range ingress.Spec.TLS {
+			if tlsCerts.SecretName != "" {
+				tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{getTLSData(ingress.Namespace, tlsCerts.SecretName)}
 			} else {
-				virtualHostsMap[virtualHost.Domains[0]] = virtualHost
+				tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{getTLSData("kube-system", "haproxy-ingress-np-tls-secret")}
 			}
 		}
-	}
-	for _, value := range virtualHostsMap {
-		virtualHosts = append(virtualHosts, value)
-	}
-	httpConnectionManager := makeConnectionManager(virtualHosts)
-	httpConfig, err := util.MessageToStruct(httpConnectionManager)
-	if err != nil {
-		log.Fatal("Error in converting connection manager")
-	}
 
-	envoyListener := &v2.Listener{
-		Name: "http",
-		Address: core.Address{
-			Address: &core.Address_SocketAddress{
-				SocketAddress: &core.SocketAddress{
-					Address: "0.0.0.0",
-					PortSpecifier: &core.SocketAddress_PortValue{
-						PortValue: 80,
-					},
+		for _, ingressRule := range ingress.Spec.Rules {
+
+			virtualHosts := []route.VirtualHost{
+				makeVirtualHost(ingress.Namespace, ingressRule),
+			}
+			httpConnectionManager := makeConnectionManager(virtualHosts)
+			httpConfig, err := util.MessageToStruct(httpConnectionManager)
+			if err != nil {
+				log.Fatal("Error in converting connection manager")
+			}
+
+			filterChain := listener.FilterChain{
+				TlsContext: tls,
+				FilterChainMatch: &listener.FilterChainMatch{
+					ServerNames: []string{ingressRule.Host},
 				},
-			},
-		},
-		//TODO fix the route part
-		FilterChains: []listener.FilterChain{
-			{
 				Filters: []listener.Filter{
 					{
 						Name: util.HTTPConnectionManager,
@@ -315,12 +297,50 @@ func makeEnvoyListeners() []envoycache.Resource {
 						},
 					},
 				},
-			},
-		},
-	}
-	envoyListeners = append(envoyListeners, envoyListener)
+			}
 
-	envoyListener = &v2.Listener{
+			existingFilterChain := listenerFilerChainsMap[ingressRule.Host]
+			if existingFilterChain.FilterChainMatch != nil {
+				log.Println(listenerFilerChainsMap[ingressRule.Host].Filters[0].ConfigType.(*listener.Filter_Config).Config.Fields)
+			} else {
+				listenerFilerChainsMap[ingressRule.Host] = filterChain
+			}
+		}
+	}
+
+	for _, value := range listenerFilerChainsMap {
+		listenerFilerChains = append(listenerFilerChains, value)
+	}
+
+	//envoyListener := &v2.Listener{
+	//	Name: "http",
+	//	Address: core.Address{
+	//		Address: &core.Address_SocketAddress{
+	//			SocketAddress: &core.SocketAddress{
+	//				Address: "0.0.0.0",
+	//				PortSpecifier: &core.SocketAddress_PortValue{
+	//					PortValue: 80,
+	//				},
+	//			},
+	//		},
+	//	},
+	//	//TODO fix the route part
+	//	//FilterChains: []listener.FilterChain{
+	//	//	{
+	//	//		Filters: []listener.Filter{
+	//	//			{
+	//	//				Name: util.HTTPConnectionManager,
+	//	//				ConfigType: &listener.Filter_Config{
+	//	//					Config: httpConfig,
+	//	//				},
+	//	//			},
+	//	//		},
+	//	//	},
+	//	//},
+	//}
+	//envoyListeners = append(envoyListeners, envoyListener)
+
+	envoyListener := &v2.Listener{
 		Name: "https",
 		Address: core.Address{
 			Address: &core.Address_SocketAddress{
@@ -333,19 +353,7 @@ func makeEnvoyListeners() []envoycache.Resource {
 			},
 		},
 		//TODO fix the route part
-		FilterChains: []listener.FilterChain{
-			{
-				TlsContext: tls,
-				Filters: []listener.Filter{
-					{
-						Name: util.HTTPConnectionManager,
-						ConfigType: &listener.Filter_Config{
-							Config: httpConfig,
-						},
-					},
-				},
-			},
-		},
+		FilterChains: listenerFilerChains,
 	}
 	envoyListeners = append(envoyListeners, envoyListener)
 
@@ -425,7 +433,7 @@ func makeVirtualHost(namespace string, ingressRule extbeta1.IngressRule) route.V
 
 	virtualHost := route.VirtualHost{
 		Name:    "local_service",
-		Domains: []string{ingressRule.Host},
+		Domains: []string{"*"},
 		Routes:  routes,
 	}
 	return virtualHost
