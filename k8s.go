@@ -89,13 +89,13 @@ func addedNode(obj interface{}) {
 	//err := ingressK8sCacheStore.Add(obj)
 	node := obj.(*v1.Node)
 	log.Info("added k8s node :" + node.Name)
-	createEnvoySnapshot()
+	//createEnvoySnapshot()
 }
 
 func deletedNode(obj interface{}) {
 	node := obj.(*v1.Node)
 	log.Info("deleted k8s node :" + node.Name)
-	createEnvoySnapshot()
+	//createEnvoySnapshot()
 }
 
 func watchServices(watchlist *k8scache.ListWatch, resyncPeriod time.Duration) k8scache.Store {
@@ -119,19 +119,19 @@ func addedService(obj interface{}) {
 	//err := ingressK8sCacheStore.Add(obj)
 	service := obj.(*v1.Service)
 	log.Info("added service node :" + service.Name)
-	createEnvoySnapshot()
+	//createEnvoySnapshot()
 }
 
 func updatedService(oldObj interface{}, newObj interface{}) {
 	service := oldObj.(*v1.Service)
 	log.Info("updated service node :" + service.Name)
-	createEnvoySnapshot()
+	//createEnvoySnapshot()
 }
 
 func deletedService(obj interface{}) {
 	service := obj.(*v1.Service)
 	log.Info("deleted service node :" + service.Name)
-	createEnvoySnapshot()
+	//createEnvoySnapshot()
 }
 
 // NewKubeClient k8s client.

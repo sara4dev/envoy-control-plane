@@ -228,10 +228,10 @@ func makeEnvoyEndpoints(servicePort v1.ServicePort, service *v1.Service, envoyEn
 	return envoyEndpoints
 }
 
-func getDefaultTLS() *auth.TlsCertificate {
-	defaultTLS, err := clientSet.CoreV1().RESTClient().Get().Namespace("kube-system").Resource("secrets").Name("haproxy-ingress-np-tls-secret").Do().Get()
+func getTLSData(namespace string, tlsSecretName string) *auth.TlsCertificate {
+	defaultTLS, err := clientSet.CoreV1().RESTClient().Get().Namespace(namespace).Resource("secrets").Name(tlsSecretName).Do().Get()
 	if err != nil {
-		log.Fatal("Error in finding default secrets")
+		log.Fatal("Error in finding TLS secrets \n" + err.Error())
 	}
 	defaultTLSSecret := defaultTLS.(*v1.Secret)
 	tlsCertificate := auth.TlsCertificate{
@@ -257,7 +257,8 @@ func makeEnvoyListeners() []envoycache.Resource {
 	//if cert != "" && key != "" {
 	tls.CommonTlsContext = &auth.CommonTlsContext{
 		TlsCertificates: []*auth.TlsCertificate{
-			getDefaultTLS(),
+			getTLSData("kube-system", "vanitysampleappsecret"),
+			//getTLSData("kube-system","haproxy-ingress-np-tls-secret"),
 		},
 	}
 
@@ -265,6 +266,12 @@ func makeEnvoyListeners() []envoycache.Resource {
 	virtualHostsMap := make(map[string]route.VirtualHost)
 	for _, obj := range ingressK8sCacheStore.List() {
 		ingress := obj.(*extbeta1.Ingress)
+
+		//for _, tlsCerts := range ingress.Spec.TLS {
+		//	if tlsCerts.SecretName != "" {
+		//		tls.CommonTlsContext.TlsCertificates = append(tls.CommonTlsContext.TlsCertificates, getTLSData(ingress.Namespace, tlsCerts.SecretName))
+		//	}
+		//}
 
 		for _, ingressRule := range ingress.Spec.Rules {
 			virtualHost := makeVirtualHost(ingress.Namespace, ingressRule)
