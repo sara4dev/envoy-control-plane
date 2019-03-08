@@ -29,6 +29,7 @@ const grpcMaxConcurrentStreams = 1000000
 var (
 	version            int32
 	envoySnapshotCache envoycache.SnapshotCache
+	tlsDataCache       map[string]auth.TlsCertificate
 )
 
 // Hasher returns node ID as an ID
@@ -131,20 +132,62 @@ func createEnvoySnapshot() {
 	atomic.AddInt32(&version, 1)
 	//nodeId := envoySnapshotCache.GetStatusKeys()[0]
 
-	envoyListeners := makeEnvoyListeners()
+	envoyListenersChan := make(chan []envoycache.Resource)
+	envoyClustersChan := make(chan []envoycache.Resource)
+	envoyEndpointsChan := make(chan []envoycache.Resource)
 
-	envoyClusters, envoyEndpoints := makeEnvoyClustersAndEndpoints()
+	go makeEnvoyListeners(envoyListenersChan)
+	go makeEnvoyClusters(envoyClustersChan)
+	go makeEnvoyEndpoints(envoyEndpointsChan)
+
+	//go makeEnvoyClustersAndEndpoints(envoyClustersChan, envoyEndpointsChan)
 
 	log.Infof(">>>>>>>>>>>>>>>>>>> creating snapshot Version " + fmt.Sprint(version))
+
+	envoyListeners := <-envoyListenersChan
+	envoyEndpoints := <-envoyEndpointsChan
+	envoyClusters := <-envoyClustersChan
 
 	snap := envoycache.NewSnapshot(fmt.Sprint(version), envoyEndpoints, envoyClusters, nil, envoyListeners)
 
 	envoySnapshotCache.SetSnapshot("test-id", snap)
 }
 
-func makeEnvoyClustersAndEndpoints() ([]envoycache.Resource, []envoycache.Resource) {
+//func makeEnvoyClustersAndEndpoints(envoyClustersChan chan []envoycache.Resource, envoyEndpointsChan chan []envoycache.Resource) {
+//	envoyClusters := []envoycache.Resource{}
+//	envoyEndpoints := []envoycache.Resource{}
+//
+//	grpcServices := []*core.GrpcService{}
+//	grpcService := &core.GrpcService{
+//		TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
+//			EnvoyGrpc: &core.GrpcService_EnvoyGrpc{
+//				ClusterName: "xds_cluster",
+//			},
+//		},
+//	}
+//	grpcServices = append(grpcServices, grpcService)
+//
+//	// Create Envoy Clusters per K8s Service
+//	for _, obj := range serviceK8sCacheStore.List() {
+//		service := obj.(*v1.Service)
+//		// create cluster only for node port type
+//		if service.Spec.Type == v1.ServiceTypeNodePort {
+//			for _, servicePort := range service.Spec.Ports {
+//				envoyClusters = makeEnvoyClusters(service, servicePort, grpcServices, envoyClusters)
+//
+//				//TODO fix the endpoints part
+//				envoyEndpoints = makeEnvoyEndpoints(servicePort, service, envoyEndpoints)
+//			}
+//		}
+//	}
+//	envoyClustersChan <- envoyClusters
+//	envoyEndpointsChan <- envoyEndpoints
+//}
+
+func makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
+	start := time.Now()
+
 	envoyClusters := []envoycache.Resource{}
-	envoyEndpoints := []envoycache.Resource{}
 
 	grpcServices := []*core.GrpcService{}
 	grpcService := &core.GrpcService{
@@ -162,144 +205,160 @@ func makeEnvoyClustersAndEndpoints() ([]envoycache.Resource, []envoycache.Resour
 		// create cluster only for node port type
 		if service.Spec.Type == v1.ServiceTypeNodePort {
 			for _, servicePort := range service.Spec.Ports {
-				envoyClusters = makeEnvoyClusters(service, servicePort, grpcServices, envoyClusters)
-
-				//TODO fix the endpoints part
-				envoyEndpoints = makeEnvoyEndpoints(servicePort, service, envoyEndpoints)
-			}
-		}
-	}
-	return envoyClusters, envoyEndpoints
-}
-
-func makeEnvoyClusters(service *v1.Service, servicePort v1.ServicePort, grpcServices []*core.GrpcService, envoyClusters []envoycache.Resource) []envoycache.Resource {
-	envoyCluster := v2.Cluster{
-		Name:           service.Namespace + "--" + service.Name + "--" + fmt.Sprint(servicePort.Port),
-		ConnectTimeout: time.Second * 1,
-		LbPolicy:       v2.Cluster_ROUND_ROBIN,
-		Type:           v2.Cluster_EDS,
-		EdsClusterConfig: &v2.Cluster_EdsClusterConfig{
-			EdsConfig: &core.ConfigSource{
-				ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
-					ApiConfigSource: &core.ApiConfigSource{
-						ApiType:      core.ApiConfigSource_GRPC,
-						GrpcServices: grpcServices,
-					},
-				},
-			},
-		},
-	}
-	envoyClusters = append(envoyClusters, &envoyCluster)
-	return envoyClusters
-}
-
-func makeEnvoyEndpoints(servicePort v1.ServicePort, service *v1.Service, envoyEndpoints []envoycache.Resource) []envoycache.Resource {
-	lbEndpoints := []endpoint.LbEndpoint{}
-	for _, obj := range nodeK8sCacheStore.List() {
-		node := obj.(*v1.Node)
-		lbEndpoint := endpoint.LbEndpoint{
-			HostIdentifier: &endpoint.LbEndpoint_Endpoint{
-				Endpoint: &endpoint.Endpoint{
-					Address: &core.Address{
-						Address: &core.Address_SocketAddress{
-							SocketAddress: &core.SocketAddress{
-								Protocol: core.TCP,
-								// TODO fix the address
-								Address: node.Status.Addresses[0].Address,
-								PortSpecifier: &core.SocketAddress_PortValue{
-									PortValue: uint32(servicePort.NodePort),
+				envoyCluster := v2.Cluster{
+					Name:           service.Namespace + "--" + service.Name + "--" + fmt.Sprint(servicePort.Port),
+					ConnectTimeout: time.Second * 1,
+					LbPolicy:       v2.Cluster_ROUND_ROBIN,
+					Type:           v2.Cluster_EDS,
+					EdsClusterConfig: &v2.Cluster_EdsClusterConfig{
+						EdsConfig: &core.ConfigSource{
+							ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
+								ApiConfigSource: &core.ApiConfigSource{
+									ApiType:      core.ApiConfigSource_GRPC,
+									GrpcServices: grpcServices,
 								},
 							},
 						},
 					},
-				},
-			},
-		}
-
-		lbEndpoints = append(lbEndpoints, lbEndpoint)
-	}
-	envoyEndpoint := v2.ClusterLoadAssignment{
-		ClusterName: service.Namespace + "--" + service.Name + "--" + fmt.Sprint(servicePort.Port),
-		Endpoints: []endpoint.LocalityLbEndpoints{{
-			LbEndpoints: lbEndpoints,
-		}},
-	}
-	envoyEndpoints = append(envoyEndpoints, &envoyEndpoint)
-	return envoyEndpoints
-}
-
-func getDefaultTLS() *auth.TlsCertificate {
-	defaultTLS, err := clientSet.CoreV1().RESTClient().Get().Namespace("kube-system").Resource("secrets").Name("haproxy-ingress-np-tls-secret").Do().Get()
-	if err != nil {
-		log.Fatal("Error in finding default secrets")
-	}
-	defaultTLSSecret := defaultTLS.(*v1.Secret)
-	tlsCertificate := auth.TlsCertificate{
-		CertificateChain: &core.DataSource{
-			Specifier: &core.DataSource_InlineBytes{
-				InlineBytes: []byte(defaultTLSSecret.Data["tls.crt"]),
-			},
-		},
-		PrivateKey: &core.DataSource{
-			Specifier: &core.DataSource_InlineBytes{
-				InlineBytes: []byte(defaultTLSSecret.Data["tls.key"]),
-			},
-		},
-	}
-
-	return &tlsCertificate
-}
-
-func makeEnvoyListeners() []envoycache.Resource {
-	envoyListeners := []envoycache.Resource{}
-
-	tls := &auth.DownstreamTlsContext{}
-	//if cert != "" && key != "" {
-	tls.CommonTlsContext = &auth.CommonTlsContext{
-		TlsCertificates: []*auth.TlsCertificate{
-			getDefaultTLS(),
-		},
-	}
-
-	virtualHosts := []route.VirtualHost{}
-	virtualHostsMap := make(map[string]route.VirtualHost)
-	for _, obj := range ingressK8sCacheStore.List() {
-		ingress := obj.(*extbeta1.Ingress)
-
-		for _, ingressRule := range ingress.Spec.Rules {
-			virtualHost := makeVirtualHost(ingress.Namespace, ingressRule)
-			existingVirtualHost := virtualHostsMap[virtualHost.Domains[0]]
-			if existingVirtualHost.Name != "" {
-				existingVirtualHost.Routes = append(existingVirtualHost.Routes, virtualHost.Routes...)
-			} else {
-				virtualHostsMap[virtualHost.Domains[0]] = virtualHost
+				}
+				envoyClusters = append(envoyClusters, &envoyCluster)
 			}
 		}
 	}
-	for _, value := range virtualHostsMap {
-		virtualHosts = append(virtualHosts, value)
-	}
-	httpConnectionManager := makeConnectionManager(virtualHosts)
-	httpConfig, err := util.MessageToStruct(httpConnectionManager)
-	if err != nil {
-		log.Fatal("Error in converting connection manager")
+
+	elapsed := time.Since(start)
+	log.Printf("makeEnvoyClusters took %s", elapsed)
+	envoyClustersChan <- envoyClusters
+}
+
+func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
+	start := time.Now()
+
+	envoyEndpoints := []envoycache.Resource{}
+
+	// Create Envoy Clusters per K8s Service
+	for _, obj := range serviceK8sCacheStore.List() {
+		service := obj.(*v1.Service)
+		// create cluster only for node port type
+		if service.Spec.Type == v1.ServiceTypeNodePort {
+			for _, servicePort := range service.Spec.Ports {
+				lbEndpoints := []endpoint.LbEndpoint{}
+				for _, obj := range nodeK8sCacheStore.List() {
+					node := obj.(*v1.Node)
+					lbEndpoint := endpoint.LbEndpoint{
+						HostIdentifier: &endpoint.LbEndpoint_Endpoint{
+							Endpoint: &endpoint.Endpoint{
+								Address: &core.Address{
+									Address: &core.Address_SocketAddress{
+										SocketAddress: &core.SocketAddress{
+											Protocol: core.TCP,
+											// TODO fix the address
+											Address: node.Status.Addresses[0].Address,
+											PortSpecifier: &core.SocketAddress_PortValue{
+												PortValue: uint32(servicePort.NodePort),
+											},
+										},
+									},
+								},
+							},
+						},
+					}
+
+					lbEndpoints = append(lbEndpoints, lbEndpoint)
+				}
+				envoyEndpoint := v2.ClusterLoadAssignment{
+					ClusterName: service.Namespace + "--" + service.Name + "--" + fmt.Sprint(servicePort.Port),
+					Endpoints: []endpoint.LocalityLbEndpoints{{
+						LbEndpoints: lbEndpoints,
+					}},
+				}
+				envoyEndpoints = append(envoyEndpoints, &envoyEndpoint)
+			}
+		}
 	}
 
-	envoyListener := &v2.Listener{
-		Name: "http",
-		Address: core.Address{
-			Address: &core.Address_SocketAddress{
-				SocketAddress: &core.SocketAddress{
-					Address: "0.0.0.0",
-					PortSpecifier: &core.SocketAddress_PortValue{
-						PortValue: 80,
-					},
+	elapsed := time.Since(start)
+	log.Printf("makeEnvoyEndpoints took %s", elapsed)
+	envoyEndpointsChan <- envoyEndpoints
+}
+
+func getTLS(namespace string, tlsSecretName string) *auth.DownstreamTlsContext {
+	tls := &auth.DownstreamTlsContext{}
+	tls.CommonTlsContext = &auth.CommonTlsContext{
+		TlsCertificates: []*auth.TlsCertificate{},
+	}
+
+	if tlsSecretName != "" {
+		tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{getTLSData(namespace, tlsSecretName)}
+	} else {
+		tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{getTLSData("kube-system", "haproxy-ingress-np-tls-secret")}
+	}
+
+	return tls
+
+}
+
+func getTLSData(namespace string, tlsSecretName string) *auth.TlsCertificate {
+	key := namespace + "--" + tlsSecretName
+	tlsCertificate := auth.TlsCertificate{}
+	if tlsDataCache[key].CertificateChain != nil {
+		tlsCertificate = tlsDataCache[key]
+	} else {
+		defaultTLS, err := clientSet.CoreV1().RESTClient().Get().Namespace(namespace).Resource("secrets").Name(tlsSecretName).Do().Get()
+		if err != nil {
+			log.Fatal("Error in finding TLS secrets \n" + err.Error())
+		}
+		defaultTLSSecret := defaultTLS.(*v1.Secret)
+		tlsCertificate = auth.TlsCertificate{
+			CertificateChain: &core.DataSource{
+				Specifier: &core.DataSource_InlineBytes{
+					InlineBytes: []byte(defaultTLSSecret.Data["tls.crt"]),
 				},
 			},
-		},
-		//TODO fix the route part
-		FilterChains: []listener.FilterChain{
-			{
+			PrivateKey: &core.DataSource{
+				Specifier: &core.DataSource_InlineBytes{
+					InlineBytes: []byte(defaultTLSSecret.Data["tls.key"]),
+				},
+			},
+		}
+
+		tlsDataCache[key] = tlsCertificate
+	}
+	return &tlsCertificate
+}
+
+func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
+	start := time.Now()
+	envoyListeners := []envoycache.Resource{}
+
+	listenerFilerChains := []listener.FilterChain{}
+	listenerFilerChainsMap := make(map[string]listener.FilterChain)
+	for _, obj := range ingressK8sCacheStore.List() {
+		ingress := obj.(*extbeta1.Ingress)
+
+		tlsSecretsMap := make(map[string]string)
+		for _, tlsCerts := range ingress.Spec.TLS {
+			for _, host := range tlsCerts.Hosts {
+				tlsSecretsMap[host] = tlsCerts.SecretName
+			}
+		}
+
+		for _, ingressRule := range ingress.Spec.Rules {
+
+			virtualHosts := []route.VirtualHost{
+				makeVirtualHost(ingress.Namespace, ingressRule),
+			}
+			httpConnectionManager := makeConnectionManager(virtualHosts)
+			httpConfig, err := util.MessageToStruct(httpConnectionManager)
+			if err != nil {
+				log.Fatal("Error in converting connection manager")
+			}
+
+			filterChain := listener.FilterChain{
+				TlsContext: getTLS(ingress.Namespace, tlsSecretsMap[ingressRule.Host]),
+				FilterChainMatch: &listener.FilterChainMatch{
+					ServerNames: []string{ingressRule.Host},
+				},
 				Filters: []listener.Filter{
 					{
 						Name: util.HTTPConnectionManager,
@@ -308,12 +367,50 @@ func makeEnvoyListeners() []envoycache.Resource {
 						},
 					},
 				},
-			},
-		},
-	}
-	envoyListeners = append(envoyListeners, envoyListener)
+			}
 
-	envoyListener = &v2.Listener{
+			existingFilterChain := listenerFilerChainsMap[ingressRule.Host]
+			if existingFilterChain.FilterChainMatch != nil {
+				log.Println(listenerFilerChainsMap[ingressRule.Host].Filters[0].ConfigType.(*listener.Filter_Config).Config.Fields)
+			} else {
+				listenerFilerChainsMap[ingressRule.Host] = filterChain
+			}
+		}
+	}
+
+	for _, value := range listenerFilerChainsMap {
+		listenerFilerChains = append(listenerFilerChains, value)
+	}
+
+	//envoyListener := &v2.Listener{
+	//	Name: "http",
+	//	Address: core.Address{
+	//		Address: &core.Address_SocketAddress{
+	//			SocketAddress: &core.SocketAddress{
+	//				Address: "0.0.0.0",
+	//				PortSpecifier: &core.SocketAddress_PortValue{
+	//					PortValue: 80,
+	//				},
+	//			},
+	//		},
+	//	},
+	//	//TODO fix the route part
+	//	//FilterChains: []listener.FilterChain{
+	//	//	{
+	//	//		Filters: []listener.Filter{
+	//	//			{
+	//	//				Name: util.HTTPConnectionManager,
+	//	//				ConfigType: &listener.Filter_Config{
+	//	//					Config: httpConfig,
+	//	//				},
+	//	//			},
+	//	//		},
+	//	//	},
+	//	//},
+	//}
+	//envoyListeners = append(envoyListeners, envoyListener)
+
+	envoyListener := &v2.Listener{
 		Name: "https",
 		Address: core.Address{
 			Address: &core.Address_SocketAddress{
@@ -326,23 +423,14 @@ func makeEnvoyListeners() []envoycache.Resource {
 			},
 		},
 		//TODO fix the route part
-		FilterChains: []listener.FilterChain{
-			{
-				TlsContext: tls,
-				Filters: []listener.Filter{
-					{
-						Name: util.HTTPConnectionManager,
-						ConfigType: &listener.Filter_Config{
-							Config: httpConfig,
-						},
-					},
-				},
-			},
-		},
+		FilterChains: listenerFilerChains,
 	}
 	envoyListeners = append(envoyListeners, envoyListener)
 
-	return envoyListeners
+	envoyListenersChan <- envoyListeners
+
+	elapsed := time.Since(start)
+	log.Printf("makeEnvoyListeners took %s", elapsed)
 }
 
 func makeConnectionManager(virtualHosts []route.VirtualHost) *hcm.HttpConnectionManager {
@@ -418,7 +506,7 @@ func makeVirtualHost(namespace string, ingressRule extbeta1.IngressRule) route.V
 
 	virtualHost := route.VirtualHost{
 		Name:    "local_service",
-		Domains: []string{ingressRule.Host},
+		Domains: []string{"*"},
 		Routes:  routes,
 	}
 	return virtualHost
