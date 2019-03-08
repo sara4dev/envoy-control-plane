@@ -228,6 +228,22 @@ func makeEnvoyEndpoints(servicePort v1.ServicePort, service *v1.Service, envoyEn
 	return envoyEndpoints
 }
 
+func getTLS(namespace string, tlsSecretName string) *auth.DownstreamTlsContext {
+	tls := &auth.DownstreamTlsContext{}
+	tls.CommonTlsContext = &auth.CommonTlsContext{
+		TlsCertificates: []*auth.TlsCertificate{},
+	}
+
+	if tlsSecretName != "" {
+		tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{getTLSData(namespace, tlsSecretName)}
+	} else {
+		tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{getTLSData("kube-system", "haproxy-ingress-np-tls-secret")}
+	}
+
+	return tls
+
+}
+
 func getTLSData(namespace string, tlsSecretName string) *auth.TlsCertificate {
 	defaultTLS, err := clientSet.CoreV1().RESTClient().Get().Namespace(namespace).Resource("secrets").Name(tlsSecretName).Do().Get()
 	if err != nil {
@@ -253,23 +269,15 @@ func getTLSData(namespace string, tlsSecretName string) *auth.TlsCertificate {
 func makeEnvoyListeners() []envoycache.Resource {
 	envoyListeners := []envoycache.Resource{}
 
-	tls := &auth.DownstreamTlsContext{}
-	tls.CommonTlsContext = &auth.CommonTlsContext{
-		TlsCertificates: []*auth.TlsCertificate{},
-	}
-
-	//virtualHosts := []route.VirtualHost{}
 	listenerFilerChains := []listener.FilterChain{}
-	//virtualHostsMap := make(map[string]route.VirtualHost)
 	listenerFilerChainsMap := make(map[string]listener.FilterChain)
 	for _, obj := range ingressK8sCacheStore.List() {
 		ingress := obj.(*extbeta1.Ingress)
 
+		tlsSecretsMap := make(map[string]string)
 		for _, tlsCerts := range ingress.Spec.TLS {
-			if tlsCerts.SecretName != "" {
-				tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{getTLSData(ingress.Namespace, tlsCerts.SecretName)}
-			} else {
-				tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{getTLSData("kube-system", "haproxy-ingress-np-tls-secret")}
+			for _, host := range tlsCerts.Hosts {
+				tlsSecretsMap[host] = tlsCerts.SecretName
 			}
 		}
 
@@ -285,7 +293,7 @@ func makeEnvoyListeners() []envoycache.Resource {
 			}
 
 			filterChain := listener.FilterChain{
-				TlsContext: tls,
+				TlsContext: getTLS(ingress.Namespace, tlsSecretsMap[ingressRule.Host]),
 				FilterChainMatch: &listener.FilterChainMatch{
 					ServerNames: []string{ingressRule.Host},
 				},
