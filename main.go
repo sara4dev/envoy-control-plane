@@ -1,12 +1,17 @@
 package main
 
 import (
+
+	"os"
+
+
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/auth"
+
 	envoycache "github.com/envoyproxy/go-control-plane/pkg/cache"
 	"github.com/envoyproxy/go-control-plane/pkg/server"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	k8scache "k8s.io/client-go/tools/cache"
 	"runtime"
@@ -15,9 +20,9 @@ import (
 func main() {
 	runtime.GOMAXPROCS(4)
 	tlsDataCache = make(map[string]auth.TlsCertificate)
-	clientSet, err = newKubeClient("/Users/z0027kp/.kube/config")
+  clientSet, err = newKubeClient(os.Getenv("KUBECONFIG"))
 	if err != nil {
-		log.Fatal("error")
+		log.Fatalf("error newKubeClient: %s", err.Error())
 	}
 	ingressWatchlist := k8scache.NewListWatchFromClient(clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", v1.NamespaceAll, fields.Everything())
 	watchIngresses(ingressWatchlist, resyncPeriod)
