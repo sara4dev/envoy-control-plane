@@ -19,13 +19,13 @@ func main() {
 	if err != nil {
 		log.Fatal("error")
 	}
-	ingressWatchlist := k8scache.NewListWatchFromClient(clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", "kube-system", fields.Everything())
+	ingressWatchlist := k8scache.NewListWatchFromClient(clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", v1.NamespaceAll, fields.Everything())
 	watchIngresses(ingressWatchlist, resyncPeriod)
 
 	nodeWatchlist := k8scache.NewListWatchFromClient(clientSet.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
 	watchNodes(nodeWatchlist, resyncPeriod)
 
-	serviceWatchlist := k8scache.NewListWatchFromClient(clientSet.CoreV1().RESTClient(), "services", "kube-system", fields.Everything())
+	serviceWatchlist := k8scache.NewListWatchFromClient(clientSet.CoreV1().RESTClient(), "services", v1.NamespaceAll, fields.Everything())
 	watchServices(serviceWatchlist, resyncPeriod)
 
 	signal = make(chan struct{})

@@ -371,7 +371,8 @@ func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 
 			existingFilterChain := listenerFilerChainsMap[ingressRule.Host]
 			if existingFilterChain.FilterChainMatch != nil {
-				log.Println(listenerFilerChainsMap[ingressRule.Host].Filters[0].ConfigType.(*listener.Filter_Config).Config.Fields)
+				//TODO combine filterchains
+				//log.Println(listenerFilerChainsMap[ingressRule.Host].Filters[0].ConfigType.(*listener.Filter_Config).Config.Fields)
 			} else {
 				listenerFilerChainsMap[ingressRule.Host] = filterChain
 			}
