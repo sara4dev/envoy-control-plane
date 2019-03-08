@@ -1,19 +1,21 @@
 package main
 
 import (
+	"os"
+
 	envoycache "github.com/envoyproxy/go-control-plane/pkg/cache"
 	"github.com/envoyproxy/go-control-plane/pkg/server"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	k8scache "k8s.io/client-go/tools/cache"
 )
 
 func main() {
-	clientSet, err = newKubeClient("/Users/z0027kp/.kube/config")
+	clientSet, err = newKubeClient(os.Getenv("KUBECONFIG"))
 	if err != nil {
-		log.Fatal("error")
+		log.Fatalf("error newKubeClient: %s", err.Error())
 	}
 
 	ingressWatchlist := k8scache.NewListWatchFromClient(clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", "kube-system", fields.Everything())
