@@ -1,9 +1,7 @@
 package main
 
 import (
-
 	"os"
-
 
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/auth"
 
@@ -11,16 +9,17 @@ import (
 	"github.com/envoyproxy/go-control-plane/pkg/server"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	k8scache "k8s.io/client-go/tools/cache"
 	"runtime"
 )
 
 func main() {
-	runtime.GOMAXPROCS(4)
+	runtime.GOMAXPROCS(2)
+	//TODO how to update the cache if the TLS changes?
 	tlsDataCache = make(map[string]auth.TlsCertificate)
-  clientSet, err = newKubeClient(os.Getenv("KUBECONFIG"))
+	clientSet, err = newKubeClient(os.Getenv("KUBECONFIG"))
 	if err != nil {
 		log.Fatalf("error newKubeClient: %s", err.Error())
 	}

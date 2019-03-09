@@ -153,40 +153,7 @@ func createEnvoySnapshot() {
 	envoySnapshotCache.SetSnapshot("test-id", snap)
 }
 
-//func makeEnvoyClustersAndEndpoints(envoyClustersChan chan []envoycache.Resource, envoyEndpointsChan chan []envoycache.Resource) {
-//	envoyClusters := []envoycache.Resource{}
-//	envoyEndpoints := []envoycache.Resource{}
-//
-//	grpcServices := []*core.GrpcService{}
-//	grpcService := &core.GrpcService{
-//		TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
-//			EnvoyGrpc: &core.GrpcService_EnvoyGrpc{
-//				ClusterName: "xds_cluster",
-//			},
-//		},
-//	}
-//	grpcServices = append(grpcServices, grpcService)
-//
-//	// Create Envoy Clusters per K8s Service
-//	for _, obj := range serviceK8sCacheStore.List() {
-//		service := obj.(*v1.Service)
-//		// create cluster only for node port type
-//		if service.Spec.Type == v1.ServiceTypeNodePort {
-//			for _, servicePort := range service.Spec.Ports {
-//				envoyClusters = makeEnvoyClusters(service, servicePort, grpcServices, envoyClusters)
-//
-//				//TODO fix the endpoints part
-//				envoyEndpoints = makeEnvoyEndpoints(servicePort, service, envoyEndpoints)
-//			}
-//		}
-//	}
-//	envoyClustersChan <- envoyClusters
-//	envoyEndpointsChan <- envoyEndpoints
-//}
-
 func makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
-	start := time.Now()
-
 	envoyClusters := []envoycache.Resource{}
 
 	grpcServices := []*core.GrpcService{}
@@ -200,46 +167,72 @@ func makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
 	grpcServices = append(grpcServices, grpcService)
 
 	// Create Envoy Clusters per K8s Service
-	for _, obj := range serviceK8sCacheStore.List() {
-		service := obj.(*v1.Service)
-		// create cluster only for node port type
-		if service.Spec.Type == v1.ServiceTypeNodePort {
-			for _, servicePort := range service.Spec.Ports {
-				envoyCluster := v2.Cluster{
-					Name:           service.Namespace + "--" + service.Name + "--" + fmt.Sprint(servicePort.Port),
-					ConnectTimeout: time.Second * 1,
-					LbPolicy:       v2.Cluster_ROUND_ROBIN,
-					Type:           v2.Cluster_EDS,
-					EdsClusterConfig: &v2.Cluster_EdsClusterConfig{
-						EdsConfig: &core.ConfigSource{
-							ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
-								ApiConfigSource: &core.ApiConfigSource{
-									ApiType:      core.ApiConfigSource_GRPC,
-									GrpcServices: grpcServices,
-								},
-							},
-						},
-					},
-				}
-				envoyClusters = append(envoyClusters, &envoyCluster)
+	//for _, obj := range serviceK8sCacheStore.List() {
+	//	service := obj.(*v1.Service)
+	//	// create cluster only for node port type
+	//	if service.Spec.Type == v1.ServiceTypeNodePort {
+	//		for _, servicePort := range service.Spec.Ports {
+	//			envoyCluster := v2.Cluster{
+	//				Name:           service.Namespace + "--" + service.Name + "--" + fmt.Sprint(servicePort.Port),
+	//				ConnectTimeout: time.Second * 1,
+	//				LbPolicy:       v2.Cluster_ROUND_ROBIN,
+	//				Type:           v2.Cluster_EDS,
+	//				EdsClusterConfig: &v2.Cluster_EdsClusterConfig{
+	//					EdsConfig: &core.ConfigSource{
+	//						ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
+	//							ApiConfigSource: &core.ApiConfigSource{
+	//								ApiType:      core.ApiConfigSource_GRPC,
+	//								GrpcServices: grpcServices,
+	//							},
+	//						},
+	//					},
+	//				},
+	//			}
+	//			envoyClusters = append(envoyClusters, &envoyCluster)
+	//		}
+	//	}
+	//}
+
+	clusterMap := make(map[string]string)
+	// Create Envoy Clusters per K8s Service referenced in ingress
+	for _, obj := range ingressK8sCacheStore.List() {
+		ingress := obj.(*extbeta1.Ingress)
+		for _, ingressRule := range ingress.Spec.Rules {
+			for _, httpPath := range ingressRule.HTTP.Paths {
+				clusterName := ingress.Namespace + "--" + httpPath.Backend.ServiceName + "--" + fmt.Sprint(httpPath.Backend.ServicePort.IntVal)
+				clusterMap[clusterName] = clusterName
 			}
 		}
 	}
 
-	elapsed := time.Since(start)
-	log.Printf("makeEnvoyClusters took %s", elapsed)
+	for _, cluster := range clusterMap {
+		envoyCluster := v2.Cluster{
+			Name:           cluster,
+			ConnectTimeout: time.Second * 1,
+			LbPolicy:       v2.Cluster_ROUND_ROBIN,
+			Type:           v2.Cluster_EDS,
+			EdsClusterConfig: &v2.Cluster_EdsClusterConfig{
+				EdsConfig: &core.ConfigSource{
+					ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
+						ApiConfigSource: &core.ApiConfigSource{
+							ApiType:      core.ApiConfigSource_GRPC,
+							GrpcServices: grpcServices,
+						},
+					},
+				},
+			},
+		}
+		envoyClusters = append(envoyClusters, &envoyCluster)
+	}
+
 	envoyClustersChan <- envoyClusters
 }
 
 func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
-	start := time.Now()
-
 	envoyEndpoints := []envoycache.Resource{}
 
-	// Create Envoy Clusters per K8s Service
 	for _, obj := range serviceK8sCacheStore.List() {
 		service := obj.(*v1.Service)
-		// create cluster only for node port type
 		if service.Spec.Type == v1.ServiceTypeNodePort {
 			for _, servicePort := range service.Spec.Ports {
 				lbEndpoints := []endpoint.LbEndpoint{}
@@ -276,9 +269,6 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 			}
 		}
 	}
-
-	elapsed := time.Since(start)
-	log.Printf("makeEnvoyEndpoints took %s", elapsed)
 	envoyEndpointsChan <- envoyEndpoints
 }
 
