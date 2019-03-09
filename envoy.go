@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/auth"
@@ -296,9 +297,19 @@ func getTLSData(namespace string, tlsSecretName string) *auth.TlsCertificate {
 	} else {
 		defaultTLS, err := clientSet.CoreV1().RESTClient().Get().Namespace(namespace).Resource("secrets").Name(tlsSecretName).Do().Get()
 		if err != nil {
-			log.Fatal("Error in finding TLS secrets \n" + err.Error())
+			log.Warn("Error in finding TLS secrets:" + namespace + "-" + tlsSecretName + ", using the default certs")
+			return getTLSData("kube-system", "haproxy-ingress-np-tls-secret")
 		}
 		defaultTLSSecret := defaultTLS.(*v1.Secret)
+		certPem := []byte(defaultTLSSecret.Data["tls.crt"])
+		keyPem := []byte(defaultTLSSecret.Data["tls.key"])
+
+		_, err = tls.X509KeyPair(certPem, keyPem)
+		if err != nil {
+			log.Warn("Bad certificate in " + namespace + "-" + tlsSecretName + ", using the default certs")
+			return getTLSData("kube-system", "haproxy-ingress-np-tls-secret")
+		}
+
 		tlsCertificate = auth.TlsCertificate{
 			CertificateChain: &core.DataSource{
 				Specifier: &core.DataSource_InlineBytes{
