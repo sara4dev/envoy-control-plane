@@ -14,6 +14,7 @@ import (
 	envoycache "github.com/envoyproxy/go-control-plane/pkg/cache"
 	"github.com/envoyproxy/go-control-plane/pkg/server"
 	"github.com/envoyproxy/go-control-plane/pkg/util"
+	"github.com/gogo/protobuf/types"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -350,7 +351,7 @@ func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 				makeVirtualHost(ingress.Namespace, ingressRule),
 			}
 			httpConnectionManager := makeConnectionManager(virtualHosts)
-			httpConfig, err := util.MessageToStruct(httpConnectionManager)
+			httpConfig, err := types.MarshalAny(httpConnectionManager)
 			if err != nil {
 				log.Fatal("Error in converting connection manager")
 			}
@@ -363,8 +364,8 @@ func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 				Filters: []listener.Filter{
 					{
 						Name: util.HTTPConnectionManager,
-						ConfigType: &listener.Filter_Config{
-							Config: httpConfig,
+						ConfigType: &listener.Filter_TypedConfig{
+							TypedConfig: httpConfig,
 						},
 					},
 				},
@@ -372,8 +373,15 @@ func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 
 			existingFilterChain := listenerFilerChainsMap[ingressRule.Host]
 			if existingFilterChain.FilterChainMatch != nil {
-				//TODO combine filterchains
-				//log.Println(listenerFilerChainsMap[ingressRule.Host].Filters[0].ConfigType.(*listener.Filter_Config).Config.Fields)
+				// if the domain already exists, combine the routes
+				existingHttpConnectionManager := &hcm.HttpConnectionManager{}
+				err = types.UnmarshalAny(existingFilterChain.Filters[0].ConfigType.(*listener.Filter_TypedConfig).TypedConfig, existingHttpConnectionManager)
+				if err != nil {
+					log.Warn("Error in converting filter chain")
+				}
+				existingRoutes := existingHttpConnectionManager.RouteSpecifier.(*hcm.HttpConnectionManager_RouteConfig).RouteConfig.VirtualHosts[0].Routes
+				existingRoutes = append(existingRoutes, virtualHosts[0].Routes...)
+				existingHttpConnectionManager.RouteSpecifier.(*hcm.HttpConnectionManager_RouteConfig).RouteConfig.VirtualHosts[0].Routes = existingRoutes
 			} else {
 				listenerFilerChainsMap[ingressRule.Host] = filterChain
 			}
@@ -383,34 +391,6 @@ func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 	for _, value := range listenerFilerChainsMap {
 		listenerFilerChains = append(listenerFilerChains, value)
 	}
-
-	//envoyListener := &v2.Listener{
-	//	Name: "http",
-	//	Address: core.Address{
-	//		Address: &core.Address_SocketAddress{
-	//			SocketAddress: &core.SocketAddress{
-	//				Address: "0.0.0.0",
-	//				PortSpecifier: &core.SocketAddress_PortValue{
-	//					PortValue: 80,
-	//				},
-	//			},
-	//		},
-	//	},
-	//	//TODO fix the route part
-	//	//FilterChains: []listener.FilterChain{
-	//	//	{
-	//	//		Filters: []listener.Filter{
-	//	//			{
-	//	//				Name: util.HTTPConnectionManager,
-	//	//				ConfigType: &listener.Filter_Config{
-	//	//					Config: httpConfig,
-	//	//				},
-	//	//			},
-	//	//		},
-	//	//	},
-	//	//},
-	//}
-	//envoyListeners = append(envoyListeners, envoyListener)
 
 	envoyListener := &v2.Listener{
 		Name: "https",

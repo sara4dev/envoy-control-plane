@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-	runtime.GOMAXPROCS(2)
+	runtime.GOMAXPROCS(4)
 	//TODO how to update the cache if the TLS changes?
 	tlsDataCache = make(map[string]auth.TlsCertificate)
 	clientSet, err = newKubeClient(os.Getenv("KUBECONFIG"))
