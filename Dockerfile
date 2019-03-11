@@ -3,6 +3,7 @@ WORKDIR /go/src/git.target.com/Kubernetes/envoy-control-plane
 COPY . .
 ENV GO111MODULE=on
 RUN apk add --no-cache git && \
+    git status && \
     go get -d ./... && \
     go build
 
