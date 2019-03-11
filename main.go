@@ -16,6 +16,7 @@ import (
 )
 
 func main() {
+	log.Info("started main")
 	runtime.GOMAXPROCS(4)
 	//TODO how to update the cache if the TLS changes?
 	tlsDataCache = make(map[string]auth.TlsCertificate)
