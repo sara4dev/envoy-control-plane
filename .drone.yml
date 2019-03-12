@@ -17,14 +17,14 @@ workspace:
   path: src/git.target.com/Kubernetes
 
 pipeline:
-  restore_go_deps_from_cache:
-    when:
-      event: [push, pull_request, tag, deployment]
-    image: docker.target.com/drone/drone-s3-cache:2
-    secrets: [ cache_s3_server, cache_s3_access_key, cache_s3_secret_key, cache_s3_ca_cert ]
-    pull: true
-    filename: deps.tgz
-    restore: true
+  # restore_go_deps_from_cache:
+  #   when:
+  #     event: [push, pull_request, tag, deployment]
+  #   image: docker.target.com/drone/drone-s3-cache:2
+  #   secrets: [ cache_s3_server, cache_s3_access_key, cache_s3_secret_key, cache_s3_ca_cert ]
+  #   pull: true
+  #   filename: deps.tgz
+  #   restore: true
 
   build-go:
     image: golang:1.11-alpine3.8
@@ -140,12 +140,12 @@ pipeline:
     sources:
       - envoy-control-plane-helm-${DRONE_TAG}.tgz
 
-  rebuild_cache:
-    when:
-      event: push
-    image: docker.target.com/drone/drone-s3-cache:2
-    secrets: [ cache_s3_server, cache_s3_access_key, cache_s3_secret_key, cache_s3_ca_cert ]
-    rebuild: true
-    filename: deps.tgz
-    mount:
-      - /drone/pkg/mod
+  # rebuild_cache:
+  #   when:
+  #     event: push
+  #   image: docker.target.com/drone/drone-s3-cache:2
+  #   secrets: [ cache_s3_server, cache_s3_access_key, cache_s3_secret_key, cache_s3_ca_cert ]
+  #   rebuild: true
+  #   filename: deps.tgz
+  #   mount:
+  #     - /drone/pkg/mod
