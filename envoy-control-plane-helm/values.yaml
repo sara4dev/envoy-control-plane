@@ -1,6 +1,6 @@
 replicaCount: 1
 
-image: "bldh/envoy-control-plain-dev"
+image: "envoy-control-plane"
 
 nameOverride: ""
 fullnameOverride: ""

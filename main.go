@@ -1,21 +1,23 @@
 package main
 
 import (
-	"k8s.io/client-go/kubernetes"
 	"os"
+
+	"k8s.io/client-go/kubernetes"
+
+	"runtime"
 
 	envoycache "github.com/envoyproxy/go-control-plane/pkg/cache"
 	"github.com/envoyproxy/go-control-plane/pkg/server"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	k8scache "k8s.io/client-go/tools/cache"
-	"runtime"
 )
 
 func main() {
-        log.WithFields(log.Fields{"Debug!": "Baron"}).Info("What is happening")
+	log.WithFields(log.Fields{"Debug!": "Baron"}).Info("What is happening")
 	runtime.GOMAXPROCS(4)
 	//TODO how to update the cache if the TLS changes?
 	//tlsDataCache = make(map[string]auth.TlsCertificate)

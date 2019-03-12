@@ -22,8 +22,7 @@ spec:
     spec:
       containers:
         - name: {{ .Chart.Name }}
-          image: "{{ .Values.image }}:test"
-          #image: "{{ .Values.image }}:{{ .Chart.Version }}"
+          image: "{{ .Values.image }}:{{ .Chart.Version }}"
           ports:
             - name: http
               containerPort: 8080
