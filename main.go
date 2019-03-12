@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/envoyproxy/go-control-plane/envoy/api/v2/auth"
 	"k8s.io/client-go/kubernetes"
 	"os"
 
@@ -19,17 +18,10 @@ func main() {
 	log.Info("started main")
 	runtime.GOMAXPROCS(4)
 	//TODO how to update the cache if the TLS changes?
-	tlsDataCache = make(map[string]auth.TlsCertificate)
-	//clientSet = make(map[string]kubernetes.Interface)
-	//ingressK8sCacheStores = make(map[string]k8scache.Store)
+	//tlsDataCache = make(map[string]auth.TlsCertificate)
 	ingressK8sCacheStores = []k8scache.Store{}
-	//ingressK8sControllers = make(map[string]k8scache.Controller)
-	//nodeK8sCacheStores = make(map[string]k8scache.Store)
 	nodeK8sCacheStores = []k8scache.Store{}
-	//nodeK8sControllers = make(map[string]k8scache.Controller)
-	//serviceK8sCacheStores = make(map[string]k8scache.Store)
 	serviceK8sCacheStores = []k8scache.Store{}
-	//serviceK8sControllers = make(map[string]k8scache.Controller)
 	k8sClusters = []string{"tgt-ttc-bigoli-test", "tgt-tte-bigoli-test"}
 	clientSets = []kubernetes.Interface{}
 	for _, k8sCluster := range k8sClusters {
@@ -39,13 +31,13 @@ func main() {
 			log.Fatalf("error newKubeClient: %s", err.Error())
 		}
 
-		ingressWatchlist := k8scache.NewListWatchFromClient(clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", "kube-system", fields.Everything())
+		ingressWatchlist := k8scache.NewListWatchFromClient(clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", v1.NamespaceAll, fields.Everything())
 		watchIngresses(ingressWatchlist, resyncPeriod)
 
 		nodeWatchlist := k8scache.NewListWatchFromClient(clientSet.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
 		watchNodes(nodeWatchlist, resyncPeriod)
 
-		serviceWatchlist := k8scache.NewListWatchFromClient(clientSet.CoreV1().RESTClient(), "services", "kube-system", fields.Everything())
+		serviceWatchlist := k8scache.NewListWatchFromClient(clientSet.CoreV1().RESTClient(), "services", v1.NamespaceAll, fields.Everything())
 		watchServices(k8sCluster, serviceWatchlist, resyncPeriod)
 	}
 

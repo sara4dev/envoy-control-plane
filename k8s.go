@@ -19,13 +19,9 @@ var (
 	resyncPeriod          time.Duration
 	signal                chan struct{}
 	ingressK8sCacheStores []k8scache.Store
-	//ingressK8sCacheStores		syncmap.Map
-	//ingressK8sControllers 		[]k8scache.Controller
-	nodeK8sCacheStores []k8scache.Store
-	//nodeK8sControllers    		map[string]k8scache.Controller
+	nodeK8sCacheStores    []k8scache.Store
 	serviceK8sCacheStores []k8scache.Store
-	//serviceK8sControllers 		map[string]k8scache.Controller
-	err error
+	err                   error
 )
 
 func watchIngresses(watchlist *k8scache.ListWatch, resyncPeriod time.Duration) {

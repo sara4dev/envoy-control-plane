@@ -32,7 +32,8 @@ const grpcMaxConcurrentStreams = 1000000
 var (
 	version            int32
 	envoySnapshotCache envoycache.SnapshotCache
-	tlsDataCache       map[string]auth.TlsCertificate
+	//tlsDataCache       map[string]auth.TlsCertificate
+	tlsDataCache sync.Map
 )
 
 // Hasher returns node ID as an ID
@@ -330,8 +331,9 @@ func getTLS(k8sCluster int, namespace string, tlsSecretName string) *auth.Downst
 func getTLSData(k8sCluster int, namespace string, tlsSecretName string) *auth.TlsCertificate {
 	key := strconv.Itoa(k8sCluster) + "--" + namespace + "--" + tlsSecretName
 	tlsCertificate := auth.TlsCertificate{}
-	if tlsDataCache[key].CertificateChain != nil {
-		tlsCertificate = tlsDataCache[key]
+	value, ok := tlsDataCache.Load(key)
+	if ok {
+		tlsCertificate = value.(auth.TlsCertificate)
 	} else {
 		defaultTLS, err := clientSets[k8sCluster].CoreV1().RESTClient().Get().Namespace(namespace).Resource("secrets").Name(tlsSecretName).Do().Get()
 		if err != nil {
@@ -361,7 +363,7 @@ func getTLSData(k8sCluster int, namespace string, tlsSecretName string) *auth.Tl
 			},
 		}
 
-		tlsDataCache[key] = tlsCertificate
+		tlsDataCache.Store(key, tlsCertificate)
 	}
 	return &tlsCertificate
 }
