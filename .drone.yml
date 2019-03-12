@@ -3,20 +3,39 @@ secrets:
     path: secret/org/Kubernetes/svkubernetes
   artifactory_password:
     path: secret/org/Kubernetes/svkubernetes
+  cache_s3_server:
+    path: secret/shared/drone/prod-secrets/cache_s3_server
+  cache_s3_access_key:
+    path: secret/shared/drone/prod-secrets/cache_s3_access_key
+  cache_s3_secret_key:
+    path: secret/shared/drone/prod-secrets/cache_s3_secret_key
+  cache_s3_ca_cert:
+    path: secret/shared/drone/prod-secrets/cache_s3_ca_cert
 
 workspace:
   base: /drone
   path: src/git.target.com/Kubernetes
 
 pipeline:
+  restore_go_deps_from_cache:
+    when:
+      event: [push, pull_request, tag, deployment]
+    image: docker.target.com/drone/drone-s3-cache:2
+    secrets: [ cache_s3_server, cache_s3_access_key, cache_s3_secret_key, cache_s3_ca_cert ]
+    pull: true
+    filename: deps.tgz
+    restore: true
+
   build-go:
-    image: golang:1.12-alpine
+    image: golang:1.11-alpine3.8
     commands:
       - "apk add --no-cache git gcc libc-dev"
       - "export GOPATH=/drone/"
+      - "export PATH=\"$${PATH}:$${GOPATH}/bin\""
       - "export GO111MODULE=on"
       - "wget http://browserconfig.target.com/tgt-certs/tgt-ca-bundle.crt --output-document=/usr/local/share/ca-certificates/tgt-ca-bundle.crt && update-ca-certificates --fresh 2>&1"
       - "go test ./..."
+      - "go build"
 
   build-docker-pr:
     when:
@@ -120,3 +139,13 @@ pipeline:
     path: kubernetes-helm/
     sources:
       - envoy-control-plane-helm-${DRONE_TAG}.tgz
+
+  rebuild_cache:
+    when:
+      event: push
+    image: docker.target.com/drone/drone-s3-cache:2
+    secrets: [ cache_s3_server, cache_s3_access_key, cache_s3_secret_key, cache_s3_ca_cert ]
+    rebuild: true
+    filename: deps.tgz
+    mount:
+      - /drone/pkg/mod
