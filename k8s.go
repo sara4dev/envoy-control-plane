@@ -1,8 +1,11 @@
 package main
 
 import (
+	"fmt"
+	"time"
+
 	log "github.com/sirupsen/logrus"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	extbeta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -10,7 +13,6 @@ import (
 	k8scache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	"time"
 )
 
 var (
@@ -130,29 +132,28 @@ func deletedService(obj interface{}) {
 func newKubeClient(kubeconfigPath string, context string) (kubernetes.Interface, error) {
 
 	var config *restclient.Config
-	//var err error
 
 	if kubeconfigPath == "" {
 		log.Warn("--kubeconfig is not specified.  Using the inClusterConfig.")
 		kubeconfig, err := restclient.InClusterConfig()
-		if err == nil {
-			config, err = kubeconfig, nil
+		if err != nil {
+			return nil, fmt.Errorf("error creating inClusterConfig, falling back to default config: %s", err)
 		}
-		log.Fatal("error creating inClusterConfig, falling back to default config: ", err)
+		config = kubeconfig
 	} else {
 		apiConfig, err := clientcmd.LoadFromFile(kubeconfigPath)
+		if err != nil {
+			return nil, fmt.Errorf("error creating kube config from file: %s", err)
+		}
 		authInfo := apiConfig.Contexts[context].AuthInfo
 		token := apiConfig.AuthInfos[authInfo].Token
 		cluster := apiConfig.Contexts[context].Cluster
 		server := apiConfig.Clusters[cluster].Server
-		if err != nil {
-			return nil, err
-		}
 		config, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 			&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath},
 			&clientcmd.ConfigOverrides{AuthInfo: clientcmdapi.AuthInfo{Token: token}, ClusterInfo: clientcmdapi.Cluster{Server: server}}).ClientConfig()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error creating client config: %s", err)
 		}
 	}
 
