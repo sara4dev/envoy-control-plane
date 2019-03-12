@@ -23,12 +23,26 @@ spec:
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image }}:{{ .Chart.Version }}"
+          command:
+            - /envoy-control-plane
+            {{- range .Values.args }}
+            - {{ . }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 8080
               protocol: TCP
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+{{ if .Values.kubeconfig.enabled }}
+          volumeMounts:
+          - name: kubeconfig
+            mountPath: "/kubeconfigs"
+      volumes:
+      - name: kubeconfig
+        secret:
+          secretName: {{ include "envoy-control-plane-helm.fullname" . }}-kubeconfig
+{{ end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
