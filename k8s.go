@@ -134,7 +134,7 @@ func newKubeClient(kubeconfigPath string, context string) (kubernetes.Interface,
 	var config *restclient.Config
 
 	if kubeconfigPath == "" {
-		log.Warn("--kubeconfig is not specified.  Using the inClusterConfig.")
+		log.Warn("--kube-config is not specified.  Using the inClusterConfig.")
 		kubeconfig, err := restclient.InClusterConfig()
 		if err != nil {
 			return nil, fmt.Errorf("error creating inClusterConfig, falling back to default config: %s", err)

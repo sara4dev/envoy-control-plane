@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 
+	"github.com/urfave/cli"
+
 	"k8s.io/client-go/kubernetes"
 
 	"runtime"
@@ -17,7 +19,24 @@ import (
 )
 
 func main() {
-	log.WithFields(log.Fields{"Debug!": "Baron"}).Info("What is happening")
+	app := cli.NewApp()
+	app.Name = "envoy-control-plane"
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "kube-config, k",
+			Usage: "Path to kube config to use",
+			Value: "",
+		},
+	}
+	app.Action = run
+	err := app.Run(os.Args)
+	if err != nil {
+		log.Fatalf("Failed to run control plane: %s", err)
+		os.Exit(1)
+	}
+}
+
+func run(ctx *cli.Context) error {
 	runtime.GOMAXPROCS(4)
 	//TODO how to update the cache if the TLS changes?
 	//tlsDataCache = make(map[string]auth.TlsCertificate)
@@ -27,7 +46,7 @@ func main() {
 	k8sClusters = []string{"tgt-ttc-bigoli-test", "tgt-tte-bigoli-test"}
 	clientSets = []kubernetes.Interface{}
 	for _, k8sCluster := range k8sClusters {
-		clientSet, err := newKubeClient(os.Getenv("KUBECONFIG"), k8sCluster)
+		clientSet, err := newKubeClient(ctx.String("kube-config"), k8sCluster)
 		clientSets = append(clientSets, clientSet)
 		if err != nil {
 			log.Fatalf("error newKubeClient: %s", err.Error())
@@ -49,4 +68,5 @@ func main() {
 	srv := server.NewServer(envoySnapshotCache, cb)
 
 	RunManagementServer(context.Background(), srv, 8080)
+	return nil
 }

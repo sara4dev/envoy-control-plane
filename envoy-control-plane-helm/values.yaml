@@ -2,6 +2,13 @@ replicaCount: 1
 
 image: "docker.target.com/kubernetes/envoy-control-plane"
 
+kubeconfig:
+  enabled: true
+  content: |
+    xxx
+
+args: []
+
 nameOverride: ""
 fullnameOverride: ""
 
