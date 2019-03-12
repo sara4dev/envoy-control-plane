@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	log.Info("started main")
+        log.WithFields(log.Fields{"Debug!": port}).Info("What is happening")
 	runtime.GOMAXPROCS(4)
 	//TODO how to update the cache if the TLS changes?
 	//tlsDataCache = make(map[string]auth.TlsCertificate)
