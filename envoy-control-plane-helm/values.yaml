@@ -1,6 +1,6 @@
 replicaCount: 1
 
-image: "envoy-control-plane"
+image: "docker.target.com/kubernetes/envoy-control-plane"
 
 nameOverride: ""
 fullnameOverride: ""
