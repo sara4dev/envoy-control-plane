@@ -6,29 +6,32 @@ import (
 	extbeta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
+	restclient "k8s.io/client-go/rest"
 	k8scache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
-	"strconv"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"time"
 )
 
 var (
-	clientSet            kubernetes.Interface
-	resyncPeriod         time.Duration
-	signal               chan struct{}
-	ingressK8sCacheStore k8scache.Store
-	ingressK8sController k8scache.Controller
-	nodeK8sCacheStore    k8scache.Store
-	nodeK8sController    k8scache.Controller
-	serviceK8sCacheStore k8scache.Store
-	serviceK8sController k8scache.Controller
-	err                  error
+	k8sClusters           []string
+	clientSets            []kubernetes.Interface
+	resyncPeriod          time.Duration
+	signal                chan struct{}
+	ingressK8sCacheStores []k8scache.Store
+	//ingressK8sCacheStores		syncmap.Map
+	//ingressK8sControllers 		[]k8scache.Controller
+	nodeK8sCacheStores []k8scache.Store
+	//nodeK8sControllers    		map[string]k8scache.Controller
+	serviceK8sCacheStores []k8scache.Store
+	//serviceK8sControllers 		map[string]k8scache.Controller
+	err error
 )
 
-func watchIngresses(watchlist *k8scache.ListWatch, resyncPeriod time.Duration) k8scache.Store {
+func watchIngresses(watchlist *k8scache.ListWatch, resyncPeriod time.Duration) {
 	//Setup an informer to call functions when the watchlist changes
-	ingressK8sCacheStore, ingressK8sController = k8scache.NewInformer(
+	//var ingressK8sCacheStore k8scache.Store
+	ingressK8sCacheStore, ingressK8sController := k8scache.NewInformer(
 		watchlist,
 		&extbeta1.Ingress{},
 		resyncPeriod,
@@ -38,40 +41,32 @@ func watchIngresses(watchlist *k8scache.ListWatch, resyncPeriod time.Duration) k
 			DeleteFunc: deletedIngress,
 		},
 	)
+	ingressK8sCacheStores = append(ingressK8sCacheStores, ingressK8sCacheStore)
 	//Run the controller as a goroutine
 	go ingressK8sController.Run(wait.NeverStop)
-	return ingressK8sCacheStore
 }
 
 func addedIngress(obj interface{}) {
-	//err := ingressK8sCacheStore.Add(obj)
 	ingress := obj.(*extbeta1.Ingress)
 	log.Info("added k8s ingress :" + ingress.Name)
-	log.Info("Cache count :" + strconv.Itoa(len(ingressK8sCacheStore.List())))
 	createEnvoySnapshot()
 }
 
 func updatedIngress(oldObj interface{}, newObj interface{}) {
 	ingress := oldObj.(*extbeta1.Ingress)
 	log.Info("updated k8s ingress :" + ingress.Name)
-	//err := ingressK8sCacheStore.Delete(oldObj)
-	//log.Error(err)
-	//err = ingressK8sCacheStore.Add(newObj)
-	//log.Error(err)
 	createEnvoySnapshot()
 }
 
 func deletedIngress(obj interface{}) {
 	ingress := obj.(*extbeta1.Ingress)
 	log.Info("deleted k8s ingress :" + ingress.Name)
-	//err := ingressK8sCacheStore.Delete(obj)
-	//log.Error(err)
 	createEnvoySnapshot()
 }
 
-func watchNodes(watchlist *k8scache.ListWatch, resyncPeriod time.Duration) k8scache.Store {
+func watchNodes(watchlist *k8scache.ListWatch, resyncPeriod time.Duration) {
 	//Setup an informer to call functions when the watchlist changes
-	nodeK8sCacheStore, nodeK8sController = k8scache.NewInformer(
+	nodeK8sCacheStore, nodeK8sController := k8scache.NewInformer(
 		watchlist,
 		&v1.Node{},
 		resyncPeriod,
@@ -80,13 +75,13 @@ func watchNodes(watchlist *k8scache.ListWatch, resyncPeriod time.Duration) k8sca
 			DeleteFunc: deletedNode,
 		},
 	)
+	nodeK8sCacheStores = append(nodeK8sCacheStores, nodeK8sCacheStore)
 	//Run the controller as a goroutine
 	go nodeK8sController.Run(wait.NeverStop)
-	return nodeK8sCacheStore
 }
 
 func addedNode(obj interface{}) {
-	//err := ingressK8sCacheStore.Add(obj)
+	//err := ingressK8sCacheStores.Add(obj)
 	node := obj.(*v1.Node)
 	log.Info("added k8s node :" + node.Name)
 	//createEnvoySnapshot()
@@ -98,9 +93,9 @@ func deletedNode(obj interface{}) {
 	//createEnvoySnapshot()
 }
 
-func watchServices(watchlist *k8scache.ListWatch, resyncPeriod time.Duration) k8scache.Store {
+func watchServices(k8sCluster string, watchlist *k8scache.ListWatch, resyncPeriod time.Duration) {
 	//Setup an informer to call functions when the watchlist changes
-	serviceK8sCacheStore, serviceK8sController = k8scache.NewInformer(
+	serviceK8sCacheStore, serviceK8sController := k8scache.NewInformer(
 		watchlist,
 		&v1.Service{},
 		resyncPeriod,
@@ -110,13 +105,14 @@ func watchServices(watchlist *k8scache.ListWatch, resyncPeriod time.Duration) k8
 			DeleteFunc: deletedService,
 		},
 	)
+	serviceK8sCacheStores = append(serviceK8sCacheStores, serviceK8sCacheStore)
+	//Run the controller as a goroutine
 	//Run the controller as a goroutine
 	go serviceK8sController.Run(wait.NeverStop)
-	return serviceK8sCacheStore
 }
 
 func addedService(obj interface{}) {
-	//err := ingressK8sCacheStore.Add(obj)
+	//err := ingressK8sCacheStores.Add(obj)
 	service := obj.(*v1.Service)
 	log.Info("added service node :" + service.Name)
 	//createEnvoySnapshot()
@@ -135,21 +131,35 @@ func deletedService(obj interface{}) {
 }
 
 // NewKubeClient k8s client.
-func newKubeClient(kubeconfigPath string) (kubernetes.Interface, error) {
-	var config *rest.Config
-	var err error
+func newKubeClient(kubeconfigPath string, context string) (kubernetes.Interface, error) {
+
+	var config *restclient.Config
+	//var err error
 
 	if kubeconfigPath == "" {
-		config, err = rest.InClusterConfig()
+		log.Warn("--kubeconfig is not specified.  Using the inClusterConfig.")
+		kubeconfig, err := restclient.InClusterConfig()
+		if err == nil {
+			config, err = kubeconfig, nil
+		}
+		log.Fatal("error creating inClusterConfig, falling back to default config: ", err)
+	} else {
+		apiConfig, err := clientcmd.LoadFromFile(kubeconfigPath)
+		authInfo := apiConfig.Contexts[context].AuthInfo
+		token := apiConfig.AuthInfos[authInfo].Token
+		cluster := apiConfig.Contexts[context].Cluster
+		server := apiConfig.Clusters[cluster].Server
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		config, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+		config, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+			&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath},
+			&clientcmd.ConfigOverrides{AuthInfo: clientcmdapi.AuthInfo{Token: token}, ClusterInfo: clientcmdapi.Cluster{Server: server}}).ClientConfig()
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	// Use protobufs for communication with apiserver.
 	config.ContentType = "application/vnd.kubernetes.protobuf"
 

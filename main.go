@@ -1,9 +1,9 @@
 package main
 
 import (
-	"os"
-
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/auth"
+	"k8s.io/client-go/kubernetes"
+	"os"
 
 	envoycache "github.com/envoyproxy/go-control-plane/pkg/cache"
 	"github.com/envoyproxy/go-control-plane/pkg/server"
@@ -20,18 +20,34 @@ func main() {
 	runtime.GOMAXPROCS(4)
 	//TODO how to update the cache if the TLS changes?
 	tlsDataCache = make(map[string]auth.TlsCertificate)
-	clientSet, err = newKubeClient(os.Getenv("KUBECONFIG"))
-	if err != nil {
-		log.Fatalf("error newKubeClient: %s", err.Error())
+	//clientSet = make(map[string]kubernetes.Interface)
+	//ingressK8sCacheStores = make(map[string]k8scache.Store)
+	ingressK8sCacheStores = []k8scache.Store{}
+	//ingressK8sControllers = make(map[string]k8scache.Controller)
+	//nodeK8sCacheStores = make(map[string]k8scache.Store)
+	nodeK8sCacheStores = []k8scache.Store{}
+	//nodeK8sControllers = make(map[string]k8scache.Controller)
+	//serviceK8sCacheStores = make(map[string]k8scache.Store)
+	serviceK8sCacheStores = []k8scache.Store{}
+	//serviceK8sControllers = make(map[string]k8scache.Controller)
+	k8sClusters = []string{"tgt-ttc-bigoli-test", "tgt-tte-bigoli-test"}
+	clientSets = []kubernetes.Interface{}
+	for _, k8sCluster := range k8sClusters {
+		clientSet, err := newKubeClient(os.Getenv("KUBECONFIG"), k8sCluster)
+		clientSets = append(clientSets, clientSet)
+		if err != nil {
+			log.Fatalf("error newKubeClient: %s", err.Error())
+		}
+
+		ingressWatchlist := k8scache.NewListWatchFromClient(clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", "kube-system", fields.Everything())
+		watchIngresses(ingressWatchlist, resyncPeriod)
+
+		nodeWatchlist := k8scache.NewListWatchFromClient(clientSet.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
+		watchNodes(nodeWatchlist, resyncPeriod)
+
+		serviceWatchlist := k8scache.NewListWatchFromClient(clientSet.CoreV1().RESTClient(), "services", "kube-system", fields.Everything())
+		watchServices(k8sCluster, serviceWatchlist, resyncPeriod)
 	}
-	ingressWatchlist := k8scache.NewListWatchFromClient(clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", v1.NamespaceAll, fields.Everything())
-	watchIngresses(ingressWatchlist, resyncPeriod)
-
-	nodeWatchlist := k8scache.NewListWatchFromClient(clientSet.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
-	watchNodes(nodeWatchlist, resyncPeriod)
-
-	serviceWatchlist := k8scache.NewListWatchFromClient(clientSet.CoreV1().RESTClient(), "services", v1.NamespaceAll, fields.Everything())
-	watchServices(serviceWatchlist, resyncPeriod)
 
 	signal = make(chan struct{})
 	cb := &callbacks{signal: signal}
