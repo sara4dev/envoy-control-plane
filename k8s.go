@@ -7,7 +7,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	extbeta1 "k8s.io/api/extensions/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
 	k8scache "k8s.io/client-go/tools/cache"
@@ -15,117 +17,166 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
-var (
-	k8sClusters           []string
-	clientSets            []kubernetes.Interface
-	resyncPeriod          time.Duration
-	signal                chan struct{}
-	ingressK8sCacheStores []k8scache.Store
-	nodeK8sCacheStores    []k8scache.Store
-	serviceK8sCacheStores []k8scache.Store
-	err                   error
+type zone int
+
+const (
+	TTC zone = 0
+	TTE zone = 1
 )
 
-func watchIngresses(watchlist *k8scache.ListWatch, resyncPeriod time.Duration) {
-	//Setup an informer to call functions when the watchlist changes
-	//var ingressK8sCacheStore k8scache.Store
-	ingressK8sCacheStore, ingressK8sController := k8scache.NewInformer(
-		watchlist,
-		&extbeta1.Ingress{},
-		resyncPeriod,
-		k8scache.ResourceEventHandlerFuncs{
-			AddFunc:    addedIngress,
-			UpdateFunc: updatedIngress,
-			DeleteFunc: deletedIngress,
-		},
-	)
-	ingressK8sCacheStores = append(ingressK8sCacheStores, ingressK8sCacheStore)
-	//Run the controller as a goroutine
-	go ingressK8sController.Run(wait.NeverStop)
+type k8sCluster struct {
+	name     string
+	zone     zone
+	priority uint32
 }
 
-func addedIngress(obj interface{}) {
+var (
+	k8sClusters  []k8sCluster
+	clientSets   map[string]kubernetes.Interface
+	resyncPeriod time.Duration
+	signal       chan struct{}
+	err          error
+	ingressLists map[*k8sCluster]*extbeta1.IngressList
+	nodeLists    map[*k8sCluster]*v1.NodeList
+	serviceLists map[*k8sCluster]*v1.ServiceList
+)
+
+func (c *k8sCluster) watchIngresses(clientSet kubernetes.Interface, resyncPeriod time.Duration) {
+	ingressLists[c], err = clientSet.ExtensionsV1beta1().Ingresses(v1.NamespaceAll).List(metav1.ListOptions{})
+	if err != nil {
+		log.Fatal("Error to list ingresses")
+	}
+
+	factory := informers.NewSharedInformerFactory(clientSet, resyncPeriod)
+	ingressSharedInformer := factory.Extensions().V1beta1().Ingresses().Informer()
+	ingressSharedInformer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
+		AddFunc:    c.addedIngress,
+		UpdateFunc: c.updatedIngress,
+		DeleteFunc: c.deletedIngress,
+	})
+	go ingressSharedInformer.Run(wait.NeverStop)
+}
+
+func (c *k8sCluster) addedIngress(obj interface{}) {
 	ingress := obj.(*extbeta1.Ingress)
-	log.Info("added k8s ingress :" + ingress.Name)
-	createEnvoySnapshot()
+	var isExistingIngress bool
+
+	for _, initialIngress := range ingressLists[c].Items {
+		if initialIngress.Namespace == ingress.Namespace && initialIngress.Name == ingress.Name {
+			isExistingIngress = true
+			break
+		}
+	}
+
+	if !isExistingIngress {
+		log.Info("added k8s ingress :" + ingress.Name)
+		ingressLists[c].Items = append(ingressLists[c].Items, *ingress)
+		createEnvoySnapshot()
+	}
 }
 
-func updatedIngress(oldObj interface{}, newObj interface{}) {
+func (c *k8sCluster) updatedIngress(oldObj interface{}, newObj interface{}) {
 	ingress := oldObj.(*extbeta1.Ingress)
 	log.Info("updated k8s ingress :" + ingress.Name)
 	createEnvoySnapshot()
 }
 
-func deletedIngress(obj interface{}) {
+func (c *k8sCluster) deletedIngress(obj interface{}) {
 	ingress := obj.(*extbeta1.Ingress)
 	log.Info("deleted k8s ingress :" + ingress.Name)
 	createEnvoySnapshot()
 }
 
-func watchNodes(watchlist *k8scache.ListWatch, resyncPeriod time.Duration) {
-	//Setup an informer to call functions when the watchlist changes
-	nodeK8sCacheStore, nodeK8sController := k8scache.NewInformer(
-		watchlist,
-		&v1.Node{},
-		resyncPeriod,
-		k8scache.ResourceEventHandlerFuncs{
-			AddFunc:    addedNode,
-			DeleteFunc: deletedNode,
-		},
-	)
-	nodeK8sCacheStores = append(nodeK8sCacheStores, nodeK8sCacheStore)
+func (c *k8sCluster) watchNodes(clientSet kubernetes.Interface, resyncPeriod time.Duration) {
+	nodeLists[c], err = clientSet.CoreV1().Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		log.Fatal("Error to list nodes")
+	}
+
+	factory := informers.NewSharedInformerFactory(clientSet, resyncPeriod)
+	nodeSharedInformer := factory.Core().V1().Nodes().Informer()
+	nodeSharedInformer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
+		AddFunc:    c.addedNode,
+		DeleteFunc: c.deletedNode,
+	})
+
 	//Run the controller as a goroutine
-	go nodeK8sController.Run(wait.NeverStop)
+	go nodeSharedInformer.Run(wait.NeverStop)
 }
 
-func addedNode(obj interface{}) {
+func (c *k8sCluster) addedNode(obj interface{}) {
 	//err := ingressK8sCacheStores.Add(obj)
 	node := obj.(*v1.Node)
-	log.Info("added k8s node :" + node.Name)
-	//createEnvoySnapshot()
+
+	var isExistingNode bool
+
+	for _, initialNode := range nodeLists[c].Items {
+		if initialNode.Name == node.Name {
+			isExistingNode = true
+			break
+		}
+	}
+
+	if !isExistingNode {
+		log.Info("added k8s node --> " + c.name + "" + node.Name)
+		nodeLists[c].Items = append(nodeLists[c].Items, *node)
+		createEnvoySnapshot()
+	}
 }
 
-func deletedNode(obj interface{}) {
+func (c *k8sCluster) deletedNode(obj interface{}) {
 	node := obj.(*v1.Node)
 	log.Info("deleted k8s node :" + node.Name)
-	//createEnvoySnapshot()
+	createEnvoySnapshot()
 }
 
-func watchServices(k8sCluster string, watchlist *k8scache.ListWatch, resyncPeriod time.Duration) {
-	//Setup an informer to call functions when the watchlist changes
-	serviceK8sCacheStore, serviceK8sController := k8scache.NewInformer(
-		watchlist,
-		&v1.Service{},
-		resyncPeriod,
-		k8scache.ResourceEventHandlerFuncs{
-			AddFunc:    addedService,
-			UpdateFunc: updatedService,
-			DeleteFunc: deletedService,
-		},
-	)
-	serviceK8sCacheStores = append(serviceK8sCacheStores, serviceK8sCacheStore)
+func (c *k8sCluster) watchServices(clientSet kubernetes.Interface, resyncPeriod time.Duration) {
+	serviceLists[c], err = clientSet.CoreV1().Services(v1.NamespaceAll).List(metav1.ListOptions{})
+	if err != nil {
+		log.Fatal("Error to list services")
+	}
+
+	factory := informers.NewSharedInformerFactory(clientSet, resyncPeriod)
+	serviceSharedInformer := factory.Core().V1().Services().Informer()
+	serviceSharedInformer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
+		AddFunc:    c.addedService,
+		UpdateFunc: c.updatedService,
+		DeleteFunc: c.deletedService,
+	})
+
 	//Run the controller as a goroutine
-	//Run the controller as a goroutine
-	go serviceK8sController.Run(wait.NeverStop)
+	go serviceSharedInformer.Run(wait.NeverStop)
 }
 
-func addedService(obj interface{}) {
-	//err := ingressK8sCacheStores.Add(obj)
+func (c *k8sCluster) addedService(obj interface{}) {
 	service := obj.(*v1.Service)
-	log.Info("added service node :" + service.Name)
-	//createEnvoySnapshot()
+
+	var isExistingService bool
+
+	for _, initialNode := range serviceLists[c].Items {
+		if initialNode.Name == service.Name {
+			isExistingService = true
+			break
+		}
+	}
+
+	if !isExistingService {
+		log.Info("added k8s service --> " + c.name + "" + service.Name)
+		serviceLists[c].Items = append(serviceLists[c].Items, *service)
+		createEnvoySnapshot()
+	}
 }
 
-func updatedService(oldObj interface{}, newObj interface{}) {
+func (c *k8sCluster) updatedService(oldObj interface{}, newObj interface{}) {
 	service := oldObj.(*v1.Service)
 	log.Info("updated service node :" + service.Name)
-	//createEnvoySnapshot()
+	createEnvoySnapshot()
 }
 
-func deletedService(obj interface{}) {
+func (c *k8sCluster) deletedService(obj interface{}) {
 	service := obj.(*v1.Service)
 	log.Info("deleted service node :" + service.Name)
-	//createEnvoySnapshot()
+	createEnvoySnapshot()
 }
 
 // NewKubeClient k8s client.

@@ -200,9 +200,8 @@ func makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
 	clusterMap := make(map[string]string)
 	// Create Envoy Clusters per K8s Service referenced in ingress
 
-	for _, ingressK8sCacheStore := range ingressK8sCacheStores {
-		for _, obj := range ingressK8sCacheStore.List() {
-			ingress := obj.(*extbeta1.Ingress)
+	for _, ingressK8sCacheStore := range ingressLists {
+		for _, ingress := range ingressK8sCacheStore.Items {
 			for _, ingressRule := range ingress.Spec.Rules {
 				for _, httpPath := range ingressRule.HTTP.Paths {
 					clusterName := getClusterName(ingress.Namespace, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal)
@@ -251,15 +250,13 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 	envoyEndpoints := []envoycache.Resource{}
 	localityLbEndpointsMap := make(map[string][]endpoint.LocalityLbEndpoints)
 
-	for k8sCluster, serviceK8sCacheStore := range serviceK8sCacheStores {
-		for _, obj := range serviceK8sCacheStore.List() {
-			service := obj.(*v1.Service)
+	for k8sCluster, serviceK8sCacheStore := range serviceLists {
+		for _, service := range serviceK8sCacheStore.Items {
 			if service.Spec.Type == v1.ServiceTypeNodePort {
 				for _, servicePort := range service.Spec.Ports {
 					clusterName := getClusterName(service.Namespace, service.Name, servicePort.Port)
 					lbEndpoints := []endpoint.LbEndpoint{}
-					for _, obj := range nodeK8sCacheStores[k8sCluster].List() {
-						node := obj.(*v1.Node)
+					for _, node := range nodeLists[k8sCluster].Items {
 						lbEndpoint := endpoint.LbEndpoint{
 							HostIdentifier: &endpoint.LbEndpoint_Endpoint{
 								Endpoint: &endpoint.Endpoint{
@@ -282,9 +279,9 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 					}
 					localityLbEndpoint := endpoint.LocalityLbEndpoints{
 						Locality: &core.Locality{
-							Zone: getZone(k8sCluster),
+							Zone: strconv.Itoa(int(k8sCluster.zone)),
 						},
-						Priority:    uint32(k8sCluster),
+						Priority:    k8sCluster.priority,
 						LbEndpoints: lbEndpoints,
 					}
 					localityLbEndpointsMap[clusterName] = append(localityLbEndpointsMap[clusterName], localityLbEndpoint)
@@ -304,15 +301,11 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 	envoyEndpointsChan <- envoyEndpoints
 }
 
-func getZone(k8sCluster int) string {
-	return k8sClusters[k8sCluster]
-}
-
 func getClusterName(k8sNamespace string, k8sServiceName string, k8sServicePort int32) string {
 	return k8sNamespace + "--" + k8sServiceName + "--" + fmt.Sprint(k8sServicePort)
 }
 
-func getTLS(k8sCluster int, namespace string, tlsSecretName string) *auth.DownstreamTlsContext {
+func getTLS(k8sCluster string, namespace string, tlsSecretName string) *auth.DownstreamTlsContext {
 	tls := &auth.DownstreamTlsContext{}
 	tls.CommonTlsContext = &auth.CommonTlsContext{
 		TlsCertificates: []*auth.TlsCertificate{},
@@ -328,8 +321,8 @@ func getTLS(k8sCluster int, namespace string, tlsSecretName string) *auth.Downst
 
 }
 
-func getTLSData(k8sCluster int, namespace string, tlsSecretName string) *auth.TlsCertificate {
-	key := strconv.Itoa(k8sCluster) + "--" + namespace + "--" + tlsSecretName
+func getTLSData(k8sCluster string, namespace string, tlsSecretName string) *auth.TlsCertificate {
+	key := k8sCluster + "--" + namespace + "--" + tlsSecretName
 	tlsCertificate := auth.TlsCertificate{}
 	value, ok := tlsDataCache.Load(key)
 	if ok {
@@ -374,10 +367,8 @@ func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 
 	listenerFilerChains := []listener.FilterChain{}
 	listenerFilerChainsMap := make(map[string]listener.FilterChain)
-	for key, ingressK8sCacheStore := range ingressK8sCacheStores {
-		for _, obj := range ingressK8sCacheStore.List() {
-			ingress := obj.(*extbeta1.Ingress)
-
+	for k8sCluster, ingressK8sCacheStore := range ingressLists {
+		for _, ingress := range ingressK8sCacheStore.Items {
 			tlsSecretsMap := make(map[string]string)
 			for _, tlsCerts := range ingress.Spec.TLS {
 				for _, host := range tlsCerts.Hosts {
@@ -388,7 +379,7 @@ func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 			for _, ingressRule := range ingress.Spec.Rules {
 
 				virtualHosts := []route.VirtualHost{
-					makeVirtualHost(key, ingress.Namespace, ingressRule),
+					makeVirtualHost(k8sCluster, ingress.Namespace, ingressRule),
 				}
 				httpConnectionManager := makeConnectionManager(virtualHosts)
 				httpConfig, err := types.MarshalAny(httpConnectionManager)
@@ -397,7 +388,7 @@ func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 				}
 
 				filterChain := listener.FilterChain{
-					TlsContext: getTLS(key, ingress.Namespace, tlsSecretsMap[ingressRule.Host]),
+					TlsContext: getTLS(k8sCluster.name, ingress.Namespace, tlsSecretsMap[ingressRule.Host]),
 					FilterChainMatch: &listener.FilterChainMatch{
 						ServerNames: []string{ingressRule.Host},
 					},
@@ -497,15 +488,24 @@ func makeConnectionManager(virtualHosts []route.VirtualHost) *hcm.HttpConnection
 	}
 }
 
-func makeVirtualHost(k8sCluster int, namespace string, ingressRule extbeta1.IngressRule) route.VirtualHost {
+func findService(k8sCluster *k8sCluster, namespace string, serviceName string) *v1.Service {
+	for _, service := range serviceLists[k8sCluster].Items {
+		if service.Namespace == namespace && service.Name == serviceName {
+			return &service
+		}
+	}
+	return nil
+}
+
+func makeVirtualHost(k8sCluster *k8sCluster, namespace string, ingressRule extbeta1.IngressRule) route.VirtualHost {
 
 	routes := []route.Route{}
 
 	for _, httpPath := range ingressRule.HTTP.Paths {
-		service, exists, _ := serviceK8sCacheStores[k8sCluster].GetByKey(namespace + "/" + httpPath.Backend.ServiceName)
-		if exists {
-			k8sService := service.(*v1.Service)
-			if k8sService.Spec.Type == v1.ServiceTypeNodePort {
+		//log.Info("k8sCluster: " + strconv.Itoa(k8sCluster))
+		service := findService(k8sCluster, namespace, httpPath.Backend.ServiceName)
+		if service != nil {
+			if service.Spec.Type == v1.ServiceTypeNodePort {
 				route := route.Route{
 					Match: route.RouteMatch{
 						PathSpecifier: &route.RouteMatch_Prefix{
