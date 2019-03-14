@@ -1,12 +1,10 @@
 package main
 
 import (
+	"github.com/urfave/cli"
 	"os"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/urfave/cli"
 
 	"runtime"
 
@@ -54,11 +52,8 @@ func setClusterPriority(envoyZone string) {
 }
 
 func run(ctx *cli.Context) error {
-	runtime.GOMAXPROCS(4)
-	resyncPeriod = time.Minute * 2
-	//ingressLists = make(map[*k8sCluster]*extbeta1.IngressList)
-	//nodeLists = make(map[*k8sCluster]*v1.NodeList)
-	//serviceLists = make(map[*k8sCluster]*v1.ServiceList)
+	runtime.GOMAXPROCS(2)
+	//resyncPeriod = time.Minute * 1
 	k8sClusters = []*k8sCluster{
 		{
 			name: "tgt-ttc-bigoli-test",
@@ -77,7 +72,9 @@ func run(ctx *cli.Context) error {
 	cb := &callbacks{signal: signal}
 	envoySnapshotCache = envoycache.NewSnapshotCache(false, Hasher{}, logger{})
 	srv := server.NewServer(envoySnapshotCache, cb)
+	//create the first envoy snapshot
 	createEnvoySnapshot()
+	//start the events to k8s controllers to start watching the events
 	for _, k8sCluster := range k8sClusters {
 		k8sCluster.addK8sEventHandlers()
 	}

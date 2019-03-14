@@ -58,14 +58,8 @@ func (c *k8sCluster) startK8sControllers(ctx *cli.Context) {
 
 	informerFactory := informers.NewSharedInformerFactory(c.clientSet, resyncPeriod)
 
-	//k8sCluster.ingressLists, err = k8sCluster.clientSet.ExtensionsV1beta1().Ingresses(v1.NamespaceAll).List(metav1.ListOptions{})
-	//ingressWatchlist := k8scache.NewListWatchFromClient(c.clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", v1.NamespaceAll, fields.Everything())
 	c.watchIngresses(informerFactory, resyncPeriod)
-
-	//nodeWatchlist := k8scache.NewListWatchFromClient(clientSet.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
 	c.watchNodes(informerFactory, resyncPeriod)
-
-	//serviceWatchlist := k8scache.NewListWatchFromClient(clientSet.CoreV1().RESTClient(), "services", v1.NamespaceAll, fields.Everything())
 	c.watchServices(informerFactory, resyncPeriod)
 }
 
@@ -102,28 +96,32 @@ func (c *k8sCluster) watchIngresses(informerFactory informers.SharedInformerFact
 func (c *k8sCluster) addedIngress(obj interface{}) {
 	newIngress := obj.(*extbeta1.Ingress)
 	var isExistingIngress bool
-	for _, ingressKey := range c.initialIngresses {
-		ingressKeys := strings.Split(ingressKey, "/")
-		if newIngress.Namespace == ingressKeys[0] && newIngress.Name == ingressKeys[1] {
+	for _, key := range c.initialIngresses {
+		namespace, name, err := k8scache.SplitMetaNamespaceKey(key)
+		if err != nil {
+			log.Fatal("Error while splittig the metanamespace key")
+		}
+		if newIngress.Namespace == namespace && newIngress.Name == name {
 			isExistingIngress = true
 			break
 		}
 	}
 	if !isExistingIngress {
-		log.Info("added k8s ingress  --> " + c.name + " " + newIngress.Name)
+		log.Info("added k8s ingress  --> " + c.name + ":" + newIngress.Namespace + ":" + newIngress.Name)
 		createEnvoySnapshot()
 	}
 }
 
 func (c *k8sCluster) updatedIngress(oldObj interface{}, newObj interface{}) {
 	oldIngress := oldObj.(*extbeta1.Ingress)
-	log.Info("updated k8s ingress :" + oldIngress.Name)
+	log.Info("updated k8s ingress  --> " + c.name + ":" + oldIngress.Namespace + ":" + oldIngress.Name)
 	createEnvoySnapshot()
 }
 
 func (c *k8sCluster) deletedIngress(obj interface{}) {
 	ingress := obj.(*extbeta1.Ingress)
-	log.Info("deleted k8s ingress :" + ingress.Name)
+	log.Info("deleted k8s ingress  --> " + c.name + ":" + ingress.Namespace + ":" + ingress.Name)
+	//TODO: delete from the intialIngress cache
 	createEnvoySnapshot()
 }
 
@@ -156,7 +154,8 @@ func (c *k8sCluster) addedNode(obj interface{}) {
 
 func (c *k8sCluster) deletedNode(obj interface{}) {
 	node := obj.(*v1.Node)
-	log.Info("deleted k8s node :" + node.Name)
+	log.Info("deleted k8s node  --> " + c.name + " " + node.Name)
+	//TODO: delete from the intialNodes cache
 	createEnvoySnapshot()
 }
 
@@ -183,20 +182,21 @@ func (c *k8sCluster) addedService(obj interface{}) {
 		}
 	}
 	if !isExistingIngress {
-		log.Info("added k8s servicesKeys  --> " + c.name + " " + newService.Name)
+		log.Info("added k8s services  --> " + c.name + ":" + newService.Namespace + ":" + newService.Name)
 		createEnvoySnapshot()
 	}
 }
 
 func (c *k8sCluster) updatedService(oldObj interface{}, newObj interface{}) {
 	service := oldObj.(*v1.Service)
-	log.Info("updated service node :" + service.Name)
+	log.Info("updated k8s services  --> " + c.name + ":" + service.Namespace + ":" + service.Name)
 	createEnvoySnapshot()
 }
 
 func (c *k8sCluster) deletedService(obj interface{}) {
 	service := obj.(*v1.Service)
-	log.Info("deleted service node :" + service.Name)
+	log.Info("deleted k8s services  --> " + c.name + ":" + service.Namespace + ":" + service.Name)
+	//TODO: delete from the intialServices cache
 	createEnvoySnapshot()
 }
 
