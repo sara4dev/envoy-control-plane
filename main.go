@@ -1,14 +1,12 @@
 package main
 
 import (
-	"k8s.io/api/core/v1"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli"
-
-	"k8s.io/client-go/kubernetes"
 
 	"runtime"
 
@@ -16,7 +14,6 @@ import (
 	"github.com/envoyproxy/go-control-plane/pkg/server"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
-	extbeta1 "k8s.io/api/extensions/v1beta1"
 )
 
 type k8sController struct {
@@ -58,11 +55,11 @@ func setClusterPriority(envoyZone string) {
 
 func run(ctx *cli.Context) error {
 	runtime.GOMAXPROCS(4)
-	//TODO how to update the cache if the TLS changes?
-	ingressLists = make(map[*k8sCluster]*extbeta1.IngressList)
-	nodeLists = make(map[*k8sCluster]*v1.NodeList)
-	serviceLists = make(map[*k8sCluster]*v1.ServiceList)
-	k8sClusters = []k8sCluster{
+	resyncPeriod = time.Minute * 2
+	//ingressLists = make(map[*k8sCluster]*extbeta1.IngressList)
+	//nodeLists = make(map[*k8sCluster]*v1.NodeList)
+	//serviceLists = make(map[*k8sCluster]*v1.ServiceList)
+	k8sClusters = []*k8sCluster{
 		{
 			name: "tgt-ttc-bigoli-test",
 			zone: TTC,
@@ -73,30 +70,17 @@ func run(ctx *cli.Context) error {
 		},
 	}
 	setClusterPriority(ctx.String("zone"))
-	clientSets = make(map[string]kubernetes.Interface)
 	for _, k8sCluster := range k8sClusters {
-		//k8sSyncController := k8sController{clusterName:k8sCluster}
-		clientSet, err := newKubeClient(ctx.String("kube-config"), k8sCluster.name)
-		clientSets[k8sCluster.name] = clientSet
-		if err != nil {
-			log.Fatalf("error newKubeClient: %s", err.Error())
-		}
-
-		//ingressWatchlist := k8scache.NewListWatchFromClient(clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", v1.NamespaceAll, fields.Everything())
-		k8sCluster.watchIngresses(clientSet, resyncPeriod)
-
-		//nodeWatchlist := k8scache.NewListWatchFromClient(clientSet.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
-		k8sCluster.watchNodes(clientSet, resyncPeriod)
-
-		//serviceWatchlist := k8scache.NewListWatchFromClient(clientSet.CoreV1().RESTClient(), "services", v1.NamespaceAll, fields.Everything())
-		k8sCluster.watchServices(clientSet, resyncPeriod)
+		k8sCluster.startK8sControllers(ctx)
 	}
-
 	signal = make(chan struct{})
 	cb := &callbacks{signal: signal}
 	envoySnapshotCache = envoycache.NewSnapshotCache(false, Hasher{}, logger{})
 	srv := server.NewServer(envoySnapshotCache, cb)
 	createEnvoySnapshot()
+	for _, k8sCluster := range k8sClusters {
+		k8sCluster.addK8sEventHandlers()
+	}
 	RunManagementServer(context.Background(), srv, 8080)
 	return nil
 }

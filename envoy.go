@@ -135,6 +135,7 @@ func RunManagementServer(ctx context.Context, server server.Server, port uint) {
 func createEnvoySnapshot() {
 	atomic.AddInt32(&version, 1)
 	//nodeId := envoySnapshotCache.GetStatusKeys()[0]
+	log.Infof(">>>>>>>>>>>>>>>>>>> creating snapshot Version " + fmt.Sprint(version))
 
 	envoyListenersChan := make(chan []envoycache.Resource)
 	envoyClustersChan := make(chan []envoycache.Resource)
@@ -144,10 +145,6 @@ func createEnvoySnapshot() {
 	go makeEnvoyClusters(envoyClustersChan)
 	go makeEnvoyEndpoints(envoyEndpointsChan)
 
-	//go makeEnvoyClustersAndEndpoints(envoyClustersChan, envoyEndpointsChan)
-
-	log.Infof(">>>>>>>>>>>>>>>>>>> creating snapshot Version " + fmt.Sprint(version))
-
 	envoyListeners := <-envoyListenersChan
 	envoyEndpoints := <-envoyEndpointsChan
 	envoyClusters := <-envoyClustersChan
@@ -155,6 +152,7 @@ func createEnvoySnapshot() {
 	snap := envoycache.NewSnapshot(fmt.Sprint(version), envoyEndpoints, envoyClusters, nil, envoyListeners)
 
 	envoySnapshotCache.SetSnapshot("test-id", snap)
+
 }
 
 func makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
@@ -200,8 +198,9 @@ func makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
 	clusterMap := make(map[string]string)
 	// Create Envoy Clusters per K8s Service referenced in ingress
 
-	for _, ingressK8sCacheStore := range ingressLists {
-		for _, ingress := range ingressK8sCacheStore.Items {
+	for _, k8sCluster := range k8sClusters {
+		for _, obj := range k8sCluster.ingressCacheStore.List() {
+			ingress := obj.(*extbeta1.Ingress)
 			for _, ingressRule := range ingress.Spec.Rules {
 				for _, httpPath := range ingressRule.HTTP.Paths {
 					clusterName := getClusterName(ingress.Namespace, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal)
@@ -250,13 +249,15 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 	envoyEndpoints := []envoycache.Resource{}
 	localityLbEndpointsMap := make(map[string][]endpoint.LocalityLbEndpoints)
 
-	for k8sCluster, serviceK8sCacheStore := range serviceLists {
-		for _, service := range serviceK8sCacheStore.Items {
+	for _, k8sCluster := range k8sClusters {
+		for _, serviceObj := range k8sCluster.serviceCacheStore.List() {
+			service := serviceObj.(*v1.Service)
 			if service.Spec.Type == v1.ServiceTypeNodePort {
 				for _, servicePort := range service.Spec.Ports {
 					clusterName := getClusterName(service.Namespace, service.Name, servicePort.Port)
 					lbEndpoints := []endpoint.LbEndpoint{}
-					for _, node := range nodeLists[k8sCluster].Items {
+					for _, nodeObj := range k8sCluster.nodeCacheStore.List() {
+						node := nodeObj.(*v1.Node)
 						lbEndpoint := endpoint.LbEndpoint{
 							HostIdentifier: &endpoint.LbEndpoint_Endpoint{
 								Endpoint: &endpoint.Endpoint{
@@ -305,7 +306,7 @@ func getClusterName(k8sNamespace string, k8sServiceName string, k8sServicePort i
 	return k8sNamespace + "--" + k8sServiceName + "--" + fmt.Sprint(k8sServicePort)
 }
 
-func getTLS(k8sCluster string, namespace string, tlsSecretName string) *auth.DownstreamTlsContext {
+func getTLS(k8sCluster *k8sCluster, namespace string, tlsSecretName string) *auth.DownstreamTlsContext {
 	tls := &auth.DownstreamTlsContext{}
 	tls.CommonTlsContext = &auth.CommonTlsContext{
 		TlsCertificates: []*auth.TlsCertificate{},
@@ -321,14 +322,14 @@ func getTLS(k8sCluster string, namespace string, tlsSecretName string) *auth.Dow
 
 }
 
-func getTLSData(k8sCluster string, namespace string, tlsSecretName string) *auth.TlsCertificate {
-	key := k8sCluster + "--" + namespace + "--" + tlsSecretName
+func getTLSData(k8sCluster *k8sCluster, namespace string, tlsSecretName string) *auth.TlsCertificate {
+	key := k8sCluster.name + "--" + namespace + "--" + tlsSecretName
 	tlsCertificate := auth.TlsCertificate{}
 	value, ok := tlsDataCache.Load(key)
 	if ok {
 		tlsCertificate = value.(auth.TlsCertificate)
 	} else {
-		defaultTLS, err := clientSets[k8sCluster].CoreV1().RESTClient().Get().Namespace(namespace).Resource("secrets").Name(tlsSecretName).Do().Get()
+		defaultTLS, err := k8sCluster.clientSet.CoreV1().RESTClient().Get().Namespace(namespace).Resource("secrets").Name(tlsSecretName).Do().Get()
 		if err != nil {
 			log.Warn("Error in finding TLS secrets:" + namespace + "-" + tlsSecretName + ", using the default certs")
 			return getTLSData(k8sCluster, "kube-system", "haproxy-ingress-np-tls-secret")
@@ -356,6 +357,7 @@ func getTLSData(k8sCluster string, namespace string, tlsSecretName string) *auth
 			},
 		}
 
+		//TODO how to update the cache if the TLS changes?
 		tlsDataCache.Store(key, tlsCertificate)
 	}
 	return &tlsCertificate
@@ -367,8 +369,9 @@ func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 
 	listenerFilerChains := []listener.FilterChain{}
 	listenerFilerChainsMap := make(map[string]listener.FilterChain)
-	for k8sCluster, ingressK8sCacheStore := range ingressLists {
-		for _, ingress := range ingressK8sCacheStore.Items {
+	for _, k8sCluster := range k8sClusters {
+		for _, ingressObj := range k8sCluster.ingressCacheStore.List() {
+			ingress := ingressObj.(*extbeta1.Ingress)
 			tlsSecretsMap := make(map[string]string)
 			for _, tlsCerts := range ingress.Spec.TLS {
 				for _, host := range tlsCerts.Hosts {
@@ -388,7 +391,7 @@ func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 				}
 
 				filterChain := listener.FilterChain{
-					TlsContext: getTLS(k8sCluster.name, ingress.Namespace, tlsSecretsMap[ingressRule.Host]),
+					TlsContext: getTLS(k8sCluster, ingress.Namespace, tlsSecretsMap[ingressRule.Host]),
 					FilterChainMatch: &listener.FilterChainMatch{
 						ServerNames: []string{ingressRule.Host},
 					},
@@ -489,9 +492,10 @@ func makeConnectionManager(virtualHosts []route.VirtualHost) *hcm.HttpConnection
 }
 
 func findService(k8sCluster *k8sCluster, namespace string, serviceName string) *v1.Service {
-	for _, service := range serviceLists[k8sCluster].Items {
+	for _, serviceObj := range k8sCluster.serviceCacheStore.List() {
+		service := serviceObj.(*v1.Service)
 		if service.Namespace == namespace && service.Name == serviceName {
-			return &service
+			return service
 		}
 	}
 	return nil
