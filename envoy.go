@@ -151,7 +151,7 @@ func createEnvoySnapshot() {
 
 	snap := envoycache.NewSnapshot(fmt.Sprint(version), envoyEndpoints, envoyClusters, nil, envoyListeners)
 
-	envoySnapshotCache.SetSnapshot("test-id", snap)
+	envoySnapshotCache.SetSnapshot("k8s_ingress", snap)
 
 }
 
