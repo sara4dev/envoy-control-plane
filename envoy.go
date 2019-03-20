@@ -36,6 +36,12 @@ var (
 	tlsDataCache sync.Map
 )
 
+type k8sService struct {
+	name      string
+	namespace string
+	port      int32
+}
+
 // Hasher returns node ID as an ID
 type Hasher struct {
 }
@@ -249,47 +255,116 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 	envoyEndpoints := []envoycache.Resource{}
 	localityLbEndpointsMap := make(map[string][]endpoint.LocalityLbEndpoints)
 
+	clusterMap := make(map[string]k8sService)
+	// Create Envoy Clusters per K8s Service referenced in ingress
+
 	for _, k8sCluster := range k8sClusters {
-		for _, serviceObj := range k8sCluster.serviceCacheStore.List() {
-			service := serviceObj.(*v1.Service)
-			//if service.Spec.Type == v1.ServiceTypeNodePort {
-			for _, servicePort := range service.Spec.Ports {
-				clusterName := getClusterName(service.Namespace, service.Name, servicePort.Port)
-				lbEndpoints := []endpoint.LbEndpoint{}
-				for _, nodeObj := range k8sCluster.nodeCacheStore.List() {
-					node := nodeObj.(*v1.Node)
-					lbEndpoint := endpoint.LbEndpoint{
-						HostIdentifier: &endpoint.LbEndpoint_Endpoint{
-							Endpoint: &endpoint.Endpoint{
-								Address: &core.Address{
-									Address: &core.Address_SocketAddress{
-										SocketAddress: &core.SocketAddress{
-											Protocol: core.TCP,
-											// TODO fix the address
-											Address: node.Status.Addresses[0].Address,
-											PortSpecifier: &core.SocketAddress_PortValue{
-												PortValue: uint32(servicePort.NodePort),
+		for _, obj := range k8sCluster.ingressCacheStore.List() {
+			ingress := obj.(*extbeta1.Ingress)
+			for _, ingressRule := range ingress.Spec.Rules {
+				for _, httpPath := range ingressRule.HTTP.Paths {
+					//TODO consider services with StrVal
+					clusterName := getClusterName(ingress.Namespace, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal)
+					k8sService := k8sService{
+						name:      httpPath.Backend.ServiceName,
+						namespace: ingress.Namespace,
+						port:      httpPath.Backend.ServicePort.IntVal,
+					}
+					clusterMap[clusterName] = k8sService
+				}
+			}
+		}
+	}
+
+	for _, k8sCluster := range k8sClusters {
+		for clusterName, k8sService := range clusterMap {
+			lbEndpoints := []endpoint.LbEndpoint{}
+			serviceObj, exists, err := k8sCluster.serviceCacheStore.GetByKey(k8sService.namespace + "/" + k8sService.name)
+			if err != nil {
+				log.Fatal("Error in getting service by name")
+			}
+			if exists {
+				service := serviceObj.(*v1.Service)
+				if service.Spec.Type == v1.ServiceTypeNodePort {
+					for _, servicePort := range service.Spec.Ports {
+						for _, nodeObj := range k8sCluster.nodeCacheStore.List() {
+							node := nodeObj.(*v1.Node)
+							lbEndpoint := endpoint.LbEndpoint{
+								HostIdentifier: &endpoint.LbEndpoint_Endpoint{
+									Endpoint: &endpoint.Endpoint{
+										Address: &core.Address{
+											Address: &core.Address_SocketAddress{
+												SocketAddress: &core.SocketAddress{
+													Protocol: core.TCP,
+													// TODO fix the address
+													Address: node.Status.Addresses[0].Address,
+													PortSpecifier: &core.SocketAddress_PortValue{
+														PortValue: uint32(servicePort.NodePort),
+													},
+												},
 											},
 										},
 									},
 								},
-							},
-						},
+							}
+							lbEndpoints = append(lbEndpoints, lbEndpoint)
+						}
 					}
-					lbEndpoints = append(lbEndpoints, lbEndpoint)
 				}
-				localityLbEndpoint := endpoint.LocalityLbEndpoints{
-					Locality: &core.Locality{
-						Zone: strconv.Itoa(int(k8sCluster.zone)),
-					},
-					Priority:    k8sCluster.priority,
-					LbEndpoints: lbEndpoints,
-				}
-				localityLbEndpointsMap[clusterName] = append(localityLbEndpointsMap[clusterName], localityLbEndpoint)
 			}
-			//}
+
+			localityLbEndpoint := endpoint.LocalityLbEndpoints{
+				Locality: &core.Locality{
+					Zone: strconv.Itoa(int(k8sCluster.zone)),
+				},
+				Priority:    k8sCluster.priority,
+				LbEndpoints: lbEndpoints,
+			}
+			localityLbEndpointsMap[clusterName] = append(localityLbEndpointsMap[clusterName], localityLbEndpoint)
 		}
 	}
+
+	//for _, k8sCluster := range k8sClusters {
+	//	for _, serviceObj := range k8sCluster.serviceCacheStore.List() {
+	//		service := serviceObj.(*v1.Service)
+	//		//if service.Spec.Type == v1.ServiceTypeNodePort {
+	//		for _, servicePort := range service.Spec.Ports {
+	//			clusterName := getClusterName(service.Namespace, service.Name, servicePort.Port)
+	//			lbEndpoints := []endpoint.LbEndpoint{}
+	//			for _, nodeObj := range k8sCluster.nodeCacheStore.List() {
+	//				node := nodeObj.(*v1.Node)
+	//				lbEndpoint := endpoint.LbEndpoint{
+	//					HostIdentifier: &endpoint.LbEndpoint_Endpoint{
+	//						Endpoint: &endpoint.Endpoint{
+	//							Address: &core.Address{
+	//								Address: &core.Address_SocketAddress{
+	//									SocketAddress: &core.SocketAddress{
+	//										Protocol: core.TCP,
+	//										// TODO fix the address
+	//										Address: node.Status.Addresses[0].Address,
+	//										PortSpecifier: &core.SocketAddress_PortValue{
+	//											PortValue: uint32(servicePort.NodePort),
+	//										},
+	//									},
+	//								},
+	//							},
+	//						},
+	//					},
+	//				}
+	//				lbEndpoints = append(lbEndpoints, lbEndpoint)
+	//			}
+	//			localityLbEndpoint := endpoint.LocalityLbEndpoints{
+	//				Locality: &core.Locality{
+	//					Zone: strconv.Itoa(int(k8sCluster.zone)),
+	//				},
+	//				Priority:    k8sCluster.priority,
+	//				LbEndpoints: lbEndpoints,
+	//			}
+	//			localityLbEndpointsMap[clusterName] = append(localityLbEndpointsMap[clusterName], localityLbEndpoint)
+	//		}
+	//		//}
+	//	}
+	//}
 
 	for clusterName, localityLbEndpoints := range localityLbEndpointsMap {
 		envoyEndpoint := v2.ClusterLoadAssignment{
