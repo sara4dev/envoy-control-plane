@@ -367,6 +367,84 @@ func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 	start := time.Now()
 	envoyListeners := []envoycache.Resource{}
 
+	envoyHttpsListenersChan := make(chan []envoycache.Resource)
+	envoyHttpListenersChan := make(chan []envoycache.Resource)
+
+	go makeEnvoyHttpsListerners(envoyHttpsListenersChan)
+	go makeEnvoyHttpListerners(envoyHttpListenersChan)
+
+	envoyHttpsListeners := <-envoyHttpsListenersChan
+	envoyListeners = append(envoyListeners, envoyHttpsListeners...)
+
+	envoyHttpListeners := <-envoyHttpListenersChan
+	envoyListeners = append(envoyListeners, envoyHttpListeners...)
+
+	envoyListenersChan <- envoyListeners
+
+	elapsed := time.Since(start)
+	log.Printf("makeEnvoyListeners took %s", elapsed)
+}
+
+func makeEnvoyHttpListerners(envoyHttpListenersChan chan []envoycache.Resource) {
+	envoyListeners := []envoycache.Resource{}
+	virtualHosts := []route.VirtualHost{}
+	virtualHostsMap := make(map[string]route.VirtualHost)
+	for _, k8sCluster := range k8sClusters {
+		for _, ingressObj := range k8sCluster.ingressCacheStore.List() {
+			//TODO: skip HTTP if annotations specified
+			ingress := ingressObj.(*extbeta1.Ingress)
+			for _, ingressRule := range ingress.Spec.Rules {
+				virtualHost := makeVirtualHost(k8sCluster, ingress.Namespace, ingressRule)
+				existingVirtualHost := virtualHostsMap[ingressRule.Host]
+				if existingVirtualHost.Name != "" {
+					existingVirtualHost.Routes = append(existingVirtualHost.Routes, virtualHost.Routes...)
+				} else {
+					virtualHostsMap[ingressRule.Host] = virtualHost
+				}
+			}
+		}
+	}
+	for _, value := range virtualHostsMap {
+		virtualHosts = append(virtualHosts, value)
+	}
+
+	httpConnectionManager := makeConnectionManager(virtualHosts)
+	httpConfig, err := types.MarshalAny(httpConnectionManager)
+	if err != nil {
+		log.Fatal("Error in converting connection manager")
+	}
+
+	filterChain := listener.FilterChain{
+		Filters: []listener.Filter{
+			{
+				Name: util.HTTPConnectionManager,
+				ConfigType: &listener.Filter_TypedConfig{
+					TypedConfig: httpConfig,
+				},
+			},
+		},
+	}
+
+	envoyListener := &v2.Listener{
+		Name: "http",
+		Address: core.Address{
+			Address: &core.Address_SocketAddress{
+				SocketAddress: &core.SocketAddress{
+					Address: "0.0.0.0",
+					PortSpecifier: &core.SocketAddress_PortValue{
+						PortValue: 80,
+					},
+				},
+			},
+		},
+		FilterChains: []listener.FilterChain{filterChain},
+	}
+	envoyListeners = append(envoyListeners, envoyListener)
+	envoyHttpListenersChan <- envoyListeners
+}
+
+func makeEnvoyHttpsListerners(envoyHttpsListenersChan chan []envoycache.Resource) {
+	envoyListeners := []envoycache.Resource{}
 	listenerFilerChains := []listener.FilterChain{}
 	listenerFilerChainsMap := make(map[string]listener.FilterChain)
 	for _, k8sCluster := range k8sClusters {
@@ -422,15 +500,9 @@ func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 			}
 		}
 	}
-
-	//for k8sCluster, ingressK8sCacheStore := range ingressK8sCacheStores {
-	//
-	//}
-
 	for _, value := range listenerFilerChainsMap {
 		listenerFilerChains = append(listenerFilerChains, value)
 	}
-
 	envoyListener := &v2.Listener{
 		Name: "https",
 		Address: core.Address{
@@ -447,11 +519,7 @@ func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 		FilterChains: listenerFilerChains,
 	}
 	envoyListeners = append(envoyListeners, envoyListener)
-
-	envoyListenersChan <- envoyListeners
-
-	elapsed := time.Since(start)
-	log.Printf("makeEnvoyListeners took %s", elapsed)
+	envoyHttpsListenersChan <- envoyListeners
 }
 
 func makeConnectionManager(virtualHosts []route.VirtualHost) *hcm.HttpConnectionManager {
@@ -537,7 +605,7 @@ func makeVirtualHost(k8sCluster *k8sCluster, namespace string, ingressRule extbe
 
 	virtualHost := route.VirtualHost{
 		Name:    "local_service",
-		Domains: []string{"*"},
+		Domains: []string{ingressRule.Host},
 		Routes:  routes,
 	}
 	return virtualHost

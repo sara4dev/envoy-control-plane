@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/urfave/cli"
+	"k8s.io/apimachinery/pkg/fields"
 	"strconv"
 	"strings"
 	"time"
@@ -11,7 +12,6 @@ import (
 	"k8s.io/api/core/v1"
 	extbeta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
 	k8scache "k8s.io/client-go/tools/cache"
@@ -31,36 +31,34 @@ type k8sCluster struct {
 	zone              zone
 	priority          uint32
 	clientSet         kubernetes.Interface
-	ingressInformer   k8scache.SharedIndexInformer
+	ingressInformer   k8scache.SharedInformer
 	ingressCacheStore k8scache.Store
 	initialIngresses  []string
-	serviceInformer   k8scache.SharedIndexInformer
+	serviceInformer   k8scache.SharedInformer
 	serviceCacheStore k8scache.Store
 	initialServices   []string
-	nodeInformer      k8scache.SharedIndexInformer
+	nodeInformer      k8scache.SharedInformer
 	nodeCacheStore    k8scache.Store
 	initialNodes      []string
 }
 
 var (
-	k8sClusters  []*k8sCluster
-	resyncPeriod time.Duration
-	signal       chan struct{}
-	err          error
+	k8sClusters     []*k8sCluster
+	resyncPeriod    time.Duration
+	signal          chan struct{}
+	err             error
+	watchNamespaces string
 )
 
 func (c *k8sCluster) startK8sControllers(ctx *cli.Context) {
-	//k8sSyncController := k8sController{clusterName:k8sCluster}
 	c.clientSet, err = newKubeClient(ctx.String("kube-config"), c.name)
 	if err != nil {
 		log.Fatalf("error newKubeClient: %s", err.Error())
 	}
-
-	informerFactory := informers.NewSharedInformerFactory(c.clientSet, resyncPeriod)
-
-	c.watchIngresses(informerFactory, resyncPeriod)
-	c.watchNodes(informerFactory, resyncPeriod)
-	c.watchServices(informerFactory, resyncPeriod)
+	watchNamespaces = v1.NamespaceAll
+	c.watchIngresses(resyncPeriod)
+	c.watchNodes(resyncPeriod)
+	c.watchServices(resyncPeriod)
 }
 
 func (c *k8sCluster) addK8sEventHandlers() {
@@ -82,8 +80,9 @@ func (c *k8sCluster) addK8sEventHandlers() {
 	})
 }
 
-func (c *k8sCluster) watchIngresses(informerFactory informers.SharedInformerFactory, resyncPeriod time.Duration) {
-	c.ingressInformer = informerFactory.Extensions().V1beta1().Ingresses().Informer()
+func (c *k8sCluster) watchIngresses(resyncPeriod time.Duration) {
+	lw := k8scache.NewListWatchFromClient(c.clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", watchNamespaces, fields.Everything())
+	c.ingressInformer = k8scache.NewSharedInformer(lw, &extbeta1.Ingress{}, resyncPeriod)
 	c.ingressCacheStore = c.ingressInformer.GetStore()
 	go c.ingressInformer.Run(wait.NeverStop)
 	log.Info("waiting to sync ingress for cluster: " + c.name)
@@ -125,8 +124,9 @@ func (c *k8sCluster) deletedIngress(obj interface{}) {
 	createEnvoySnapshot()
 }
 
-func (c *k8sCluster) watchNodes(informerFactory informers.SharedInformerFactory, resyncPeriod time.Duration) {
-	c.nodeInformer = informerFactory.Core().V1().Nodes().Informer()
+func (c *k8sCluster) watchNodes(resyncPeriod time.Duration) {
+	lw := k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "nodes", watchNamespaces, fields.Everything())
+	c.nodeInformer = k8scache.NewSharedInformer(lw, &v1.Node{}, resyncPeriod)
 	c.nodeCacheStore = c.nodeInformer.GetStore()
 	//Run the controller as a goroutine
 	go c.nodeInformer.Run(wait.NeverStop)
@@ -159,8 +159,9 @@ func (c *k8sCluster) deletedNode(obj interface{}) {
 	createEnvoySnapshot()
 }
 
-func (c *k8sCluster) watchServices(informerFactory informers.SharedInformerFactory, resyncPeriod time.Duration) {
-	c.serviceInformer = informerFactory.Core().V1().Services().Informer()
+func (c *k8sCluster) watchServices(resyncPeriod time.Duration) {
+	lw := k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "services", "kube-system", fields.Everything())
+	c.serviceInformer = k8scache.NewSharedInformer(lw, &v1.Service{}, resyncPeriod)
 	c.serviceCacheStore = c.serviceInformer.GetStore()
 	//Run the controller as a goroutine
 	go c.serviceInformer.Run(wait.NeverStop)
