@@ -252,42 +252,42 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 	for _, k8sCluster := range k8sClusters {
 		for _, serviceObj := range k8sCluster.serviceCacheStore.List() {
 			service := serviceObj.(*v1.Service)
-			if service.Spec.Type == v1.ServiceTypeNodePort {
-				for _, servicePort := range service.Spec.Ports {
-					clusterName := getClusterName(service.Namespace, service.Name, servicePort.Port)
-					lbEndpoints := []endpoint.LbEndpoint{}
-					for _, nodeObj := range k8sCluster.nodeCacheStore.List() {
-						node := nodeObj.(*v1.Node)
-						lbEndpoint := endpoint.LbEndpoint{
-							HostIdentifier: &endpoint.LbEndpoint_Endpoint{
-								Endpoint: &endpoint.Endpoint{
-									Address: &core.Address{
-										Address: &core.Address_SocketAddress{
-											SocketAddress: &core.SocketAddress{
-												Protocol: core.TCP,
-												// TODO fix the address
-												Address: node.Status.Addresses[0].Address,
-												PortSpecifier: &core.SocketAddress_PortValue{
-													PortValue: uint32(servicePort.NodePort),
-												},
+			//if service.Spec.Type == v1.ServiceTypeNodePort {
+			for _, servicePort := range service.Spec.Ports {
+				clusterName := getClusterName(service.Namespace, service.Name, servicePort.Port)
+				lbEndpoints := []endpoint.LbEndpoint{}
+				for _, nodeObj := range k8sCluster.nodeCacheStore.List() {
+					node := nodeObj.(*v1.Node)
+					lbEndpoint := endpoint.LbEndpoint{
+						HostIdentifier: &endpoint.LbEndpoint_Endpoint{
+							Endpoint: &endpoint.Endpoint{
+								Address: &core.Address{
+									Address: &core.Address_SocketAddress{
+										SocketAddress: &core.SocketAddress{
+											Protocol: core.TCP,
+											// TODO fix the address
+											Address: node.Status.Addresses[0].Address,
+											PortSpecifier: &core.SocketAddress_PortValue{
+												PortValue: uint32(servicePort.NodePort),
 											},
 										},
 									},
 								},
 							},
-						}
-						lbEndpoints = append(lbEndpoints, lbEndpoint)
-					}
-					localityLbEndpoint := endpoint.LocalityLbEndpoints{
-						Locality: &core.Locality{
-							Zone: strconv.Itoa(int(k8sCluster.zone)),
 						},
-						Priority:    k8sCluster.priority,
-						LbEndpoints: lbEndpoints,
 					}
-					localityLbEndpointsMap[clusterName] = append(localityLbEndpointsMap[clusterName], localityLbEndpoint)
+					lbEndpoints = append(lbEndpoints, lbEndpoint)
 				}
+				localityLbEndpoint := endpoint.LocalityLbEndpoints{
+					Locality: &core.Locality{
+						Zone: strconv.Itoa(int(k8sCluster.zone)),
+					},
+					Priority:    k8sCluster.priority,
+					LbEndpoints: lbEndpoints,
+				}
+				localityLbEndpointsMap[clusterName] = append(localityLbEndpointsMap[clusterName], localityLbEndpoint)
 			}
+			//}
 		}
 	}
 
