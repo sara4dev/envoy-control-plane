@@ -1,0 +1,12 @@
+version: '3'
+services:
+  envoy-control-plane-helm:
+    build: .
+    ports:
+      - "8080:8080"
+  envoy:
+    image: "docker.target.com/kubernetes/envoy:v1"
+    ports:
+      - "9901:9901"
+      - "80:80"
+      - "443:443"
