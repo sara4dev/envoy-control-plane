@@ -66,7 +66,10 @@ func run(ctx *cli.Context) error {
 	}
 	setClusterPriority(ctx.String("zone"))
 	for _, k8sCluster := range k8sClusters {
-		k8sCluster.startK8sControllers(ctx)
+		err = k8sCluster.startK8sControllers(ctx.String("kube-config"))
+		if err != nil {
+			log.Fatal("Fatal Error occurred: " + err.Error())
+		}
 	}
 	signal = make(chan struct{})
 	cb := &callbacks{signal: signal}

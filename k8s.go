@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/urfave/cli"
 	"k8s.io/apimachinery/pkg/fields"
 	"strconv"
 	"strings"
@@ -50,15 +49,16 @@ var (
 	watchNamespaces string
 )
 
-func (c *k8sCluster) startK8sControllers(ctx *cli.Context) {
-	c.clientSet, err = newKubeClient(ctx.String("kube-config"), c.name)
+func (c *k8sCluster) startK8sControllers(kubeConfigPath string) error {
+	c.clientSet, err = newKubeClient(kubeConfigPath, c.name)
 	if err != nil {
-		log.Fatalf("error newKubeClient: %s", err.Error())
+		return err
 	}
 	watchNamespaces = v1.NamespaceAll
 	c.watchIngresses(resyncPeriod)
 	c.watchNodes(resyncPeriod)
 	c.watchServices(resyncPeriod)
+	return nil
 }
 
 func (c *k8sCluster) addK8sEventHandlers() {
