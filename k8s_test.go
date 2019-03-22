@@ -4,18 +4,18 @@ import (
 	"testing"
 )
 
-func init() {
-	k8sClusters = []*k8sCluster{
-		{
-			name: "tgt-ttc-bigoli-test",
-			zone: TTC,
-		},
-		{
-			name: "tgt-tte-bigoli-test",
-			zone: TTE,
-		},
-	}
-}
+//func init() {
+//	k8sClusters = []*k8sCluster{
+//		{
+//			name: "tgt-ttc-bigoli-test",
+//			zone: TTC,
+//		},
+//		{
+//			name: "tgt-tte-bigoli-test",
+//			zone: TTE,
+//		},
+//	}
+//}
 
 func TestStartK8sControllers(t *testing.T) {
 	for _, k8sCluster := range k8sClusters {
