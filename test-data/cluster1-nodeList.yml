@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: List
+metadata: {}
+resourceVersion: ""
+selfLink: ""
+items:
+- apiVersion: v1
+  kind: Node
+  metadata:
+    name: cluster1-node1
+  status:
+    addresses:
+    - address: 10.0.0.1
+      type: InternalIP
+    - address: cluster1-node1
+      type: Hostname
+- apiVersion: v1
+  kind: Node
+  metadata:
+    name: cluster1-node2
+  status:
+    addresses:
+      - address: 10.0.0.2
+        type: InternalIP
+      - address: cluster1-node2
+        type: Hostname
+- apiVersion: v1
+  kind: Node
+  metadata:
+    name: cluster1-node3
+  status:
+    addresses:
+      - address: 10.0.0.3
+        type: InternalIP
+      - address: cluster1-node3
+        type: Hostname
+- apiVersion: v1
+  kind: Node
+  metadata:
+    name: cluster1-node4
+  status:
+    addresses:
+      - address: 10.0.0.4
+        type: InternalIP
+      - address: cluster1-node4
+        type: Hostname
+- apiVersion: v1
+  kind: Node
+  metadata:
+    name: cluster1-node5
+  status:
+    addresses:
+      - address: 10.0.0.5
+        type: InternalIP
+      - address: cluster1-node5
+        type: Hostname

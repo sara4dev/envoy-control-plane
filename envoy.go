@@ -182,7 +182,7 @@ func makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
 			ingress := obj.(*extbeta1.Ingress)
 			for _, ingressRule := range ingress.Spec.Rules {
 				for _, httpPath := range ingressRule.HTTP.Paths {
-					clusterName := getClusterName(ingress.Namespace, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal)
+					clusterName := getClusterName(k8sCluster.name, ingress.Namespace, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal)
 					clusterMap[clusterName] = clusterName
 				}
 			}
@@ -225,7 +225,7 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 			for _, ingressRule := range ingress.Spec.Rules {
 				for _, httpPath := range ingressRule.HTTP.Paths {
 					//TODO consider services with StrVal
-					clusterName := getClusterName(ingress.Namespace, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal)
+					clusterName := getClusterName(k8sCluster.name, ingress.Namespace, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal)
 					k8sService := k8sService{
 						name:      httpPath.Backend.ServiceName,
 						namespace: ingress.Namespace,
@@ -296,8 +296,8 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 	envoyEndpointsChan <- envoyEndpoints
 }
 
-func getClusterName(k8sNamespace string, k8sServiceName string, k8sServicePort int32) string {
-	return k8sNamespace + "--" + k8sServiceName + "--" + fmt.Sprint(k8sServicePort)
+func getClusterName(k8sCluster string, k8sNamespace string, k8sServiceName string, k8sServicePort int32) string {
+	return k8sCluster + "--" + k8sNamespace + "--" + k8sServiceName + "--" + fmt.Sprint(k8sServicePort)
 }
 
 func getTLS(k8sCluster *k8sCluster, namespace string, tlsSecretName string) *auth.DownstreamTlsContext {
@@ -309,6 +309,7 @@ func getTLS(k8sCluster *k8sCluster, namespace string, tlsSecretName string) *aut
 	if tlsSecretName != "" {
 		tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{getTLSData(k8sCluster, namespace, tlsSecretName)}
 	} else {
+		//TODO remove hard coding of default TLS
 		tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{getTLSData(k8sCluster, "kube-system", "haproxy-ingress-np-tls-secret")}
 	}
 
@@ -323,36 +324,40 @@ func getTLSData(k8sCluster *k8sCluster, namespace string, tlsSecretName string) 
 	if ok {
 		tlsCertificate = value.(auth.TlsCertificate)
 	} else {
-		defaultTLS, err := k8sCluster.clientSet.CoreV1().RESTClient().Get().Namespace(namespace).Resource("secrets").Name(tlsSecretName).Do().Get()
+		defaultTLS, exists, err := k8sCluster.secretCacheStore.GetByKey(namespace + "/" + tlsSecretName)
 		if err != nil {
 			log.Warn("Error in finding TLS secrets:" + namespace + "-" + tlsSecretName + ", using the default certs")
+			//TODO remove hard coding of default TLS
 			return getTLSData(k8sCluster, "kube-system", "haproxy-ingress-np-tls-secret")
 		}
-		defaultTLSSecret := defaultTLS.(*v1.Secret)
-		certPem := []byte(defaultTLSSecret.Data["tls.crt"])
-		keyPem := []byte(defaultTLSSecret.Data["tls.key"])
+		if exists {
+			defaultTLSSecret := defaultTLS.(*v1.Secret)
+			certPem := []byte(defaultTLSSecret.Data["tls.crt"])
+			keyPem := []byte(defaultTLSSecret.Data["tls.key"])
 
-		_, err = tls.X509KeyPair(certPem, keyPem)
-		if err != nil {
-			log.Warn("Bad certificate in " + namespace + "-" + tlsSecretName + ", using the default certs")
-			return getTLSData(k8sCluster, "kube-system", "haproxy-ingress-np-tls-secret")
-		}
+			_, err = tls.X509KeyPair(certPem, keyPem)
+			if err != nil {
+				log.Warn("Bad certificate in " + namespace + "-" + tlsSecretName + ", using the default certs")
+				//TODO remove hard coding of default TLS
+				return getTLSData(k8sCluster, "kube-system", "haproxy-ingress-np-tls-secret")
+			}
 
-		tlsCertificate = auth.TlsCertificate{
-			CertificateChain: &core.DataSource{
-				Specifier: &core.DataSource_InlineBytes{
-					InlineBytes: []byte(defaultTLSSecret.Data["tls.crt"]),
+			tlsCertificate = auth.TlsCertificate{
+				CertificateChain: &core.DataSource{
+					Specifier: &core.DataSource_InlineBytes{
+						InlineBytes: []byte(defaultTLSSecret.Data["tls.crt"]),
+					},
 				},
-			},
-			PrivateKey: &core.DataSource{
-				Specifier: &core.DataSource_InlineBytes{
-					InlineBytes: []byte(defaultTLSSecret.Data["tls.key"]),
+				PrivateKey: &core.DataSource{
+					Specifier: &core.DataSource_InlineBytes{
+						InlineBytes: []byte(defaultTLSSecret.Data["tls.key"]),
+					},
 				},
-			},
-		}
+			}
 
-		//TODO how to update the cache if the TLS changes?
-		tlsDataCache.Store(key, tlsCertificate)
+			//TODO how to update the cache if the TLS changes?
+			tlsDataCache.Store(key, tlsCertificate)
+		}
 	}
 	return &tlsCertificate
 }

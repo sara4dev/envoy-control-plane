@@ -20,6 +20,7 @@ import (
 
 type zone int
 
+//TODO remove hardcoded zone
 const (
 	TTC zone = 0
 	TTE zone = 1
@@ -36,6 +37,9 @@ type k8sCluster struct {
 	serviceInformer   k8scache.SharedInformer
 	serviceCacheStore k8scache.Store
 	initialServices   []string
+	secretInformer    k8scache.SharedInformer
+	secretCacheStore  k8scache.Store
+	initialSecrets    []string
 	nodeInformer      k8scache.SharedInformer
 	nodeCacheStore    k8scache.Store
 	initialNodes      []string
@@ -56,8 +60,9 @@ func (c *k8sCluster) startK8sControllers(kubeConfigPath string) error {
 	}
 	watchNamespaces = v1.NamespaceAll
 	c.watchIngresses(resyncPeriod)
-	c.watchNodes(resyncPeriod)
 	c.watchServices(resyncPeriod)
+	c.watchSecrets(resyncPeriod)
+	c.watchNodes(resyncPeriod)
 	return nil
 }
 
@@ -68,15 +73,21 @@ func (c *k8sCluster) addK8sEventHandlers() {
 		DeleteFunc: c.deletedIngress,
 	})
 
-	c.nodeInformer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
-		AddFunc:    c.addedNode,
-		DeleteFunc: c.deletedNode,
-	})
-
 	c.serviceInformer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
 		AddFunc:    c.addedService,
 		UpdateFunc: c.updatedService,
 		DeleteFunc: c.deletedService,
+	})
+
+	c.secretInformer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
+		AddFunc:    c.addedSecret,
+		UpdateFunc: c.updatedSecret,
+		DeleteFunc: c.deletedSecret,
+	})
+
+	c.nodeInformer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
+		AddFunc:    c.addedNode,
+		DeleteFunc: c.deletedNode,
 	})
 }
 
@@ -124,43 +135,8 @@ func (c *k8sCluster) deletedIngress(obj interface{}) {
 	createEnvoySnapshot()
 }
 
-func (c *k8sCluster) watchNodes(resyncPeriod time.Duration) {
-	lw := k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "nodes", watchNamespaces, fields.Everything())
-	c.nodeInformer = k8scache.NewSharedInformer(lw, &v1.Node{}, resyncPeriod)
-	c.nodeCacheStore = c.nodeInformer.GetStore()
-	//Run the controller as a goroutine
-	go c.nodeInformer.Run(wait.NeverStop)
-	log.Info("waiting to sync nodes for cluster: " + c.name)
-	for !c.nodeInformer.HasSynced() {
-	}
-	c.initialNodes = c.nodeCacheStore.ListKeys()
-	log.Info(strconv.Itoa(len(c.nodeCacheStore.List())) + " nodes synced for cluster " + c.name)
-}
-
-func (c *k8sCluster) addedNode(obj interface{}) {
-	newNode := obj.(*v1.Node)
-	var isExistingNode bool
-	for _, nodeKey := range c.initialNodes {
-		if newNode.Name == nodeKey {
-			isExistingNode = true
-			break
-		}
-	}
-	if !isExistingNode {
-		log.Info("added k8s node  --> " + c.name + " " + newNode.Name)
-		createEnvoySnapshot()
-	}
-}
-
-func (c *k8sCluster) deletedNode(obj interface{}) {
-	node := obj.(*v1.Node)
-	log.Info("deleted k8s node  --> " + c.name + " " + node.Name)
-	//TODO: delete from the intialNodes cache
-	createEnvoySnapshot()
-}
-
 func (c *k8sCluster) watchServices(resyncPeriod time.Duration) {
-	lw := k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "services", "kube-system", fields.Everything())
+	lw := k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "services", watchNamespaces, fields.Everything())
 	c.serviceInformer = k8scache.NewSharedInformer(lw, &v1.Service{}, resyncPeriod)
 	c.serviceCacheStore = c.serviceInformer.GetStore()
 	//Run the controller as a goroutine
@@ -198,6 +174,83 @@ func (c *k8sCluster) deletedService(obj interface{}) {
 	service := obj.(*v1.Service)
 	log.Info("deleted k8s services  --> " + c.name + ":" + service.Namespace + ":" + service.Name)
 	//TODO: delete from the intialServices cache
+	createEnvoySnapshot()
+}
+
+func (c *k8sCluster) watchSecrets(resyncPeriod time.Duration) {
+	lw := k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "secrets", "kube-system", fields.Everything())
+	c.secretInformer = k8scache.NewSharedInformer(lw, &v1.Secret{}, resyncPeriod)
+	c.secretCacheStore = c.secretInformer.GetStore()
+	//Run the controller as a goroutine
+	go c.secretInformer.Run(wait.NeverStop)
+	log.Info("waiting to sync secrets for cluster: " + c.name)
+	for !c.secretInformer.HasSynced() {
+	}
+	c.initialSecrets = c.secretCacheStore.ListKeys()
+	log.Info(strconv.Itoa(len(c.secretCacheStore.List())) + " secrets synced for cluster " + c.name)
+}
+
+func (c *k8sCluster) addedSecret(obj interface{}) {
+	newSecret := obj.(*v1.Secret)
+	var isExistingIngress bool
+	for _, secretsKey := range c.initialSecrets {
+		secretsKeys := strings.Split(secretsKey, "/")
+		if newSecret.Namespace == secretsKeys[0] && newSecret.Name == secretsKeys[1] {
+			isExistingIngress = true
+			break
+		}
+	}
+	if !isExistingIngress {
+		log.Info("added k8s Secret  --> " + c.name + ":" + newSecret.Namespace + ":" + newSecret.Name)
+		createEnvoySnapshot()
+	}
+}
+
+func (c *k8sCluster) updatedSecret(oldObj interface{}, newObj interface{}) {
+	secret := oldObj.(*v1.Secret)
+	log.Info("updated k8s Secret  --> " + c.name + ":" + secret.Namespace + ":" + secret.Name)
+	createEnvoySnapshot()
+}
+
+func (c *k8sCluster) deletedSecret(obj interface{}) {
+	secret := obj.(*v1.Service)
+	log.Info("deleted k8s Secret  --> " + c.name + ":" + secret.Namespace + ":" + secret.Name)
+	//TODO: delete from the intialServices cache
+	createEnvoySnapshot()
+}
+
+func (c *k8sCluster) watchNodes(resyncPeriod time.Duration) {
+	lw := k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
+	c.nodeInformer = k8scache.NewSharedInformer(lw, &v1.Node{}, resyncPeriod)
+	c.nodeCacheStore = c.nodeInformer.GetStore()
+	//Run the controller as a goroutine
+	go c.nodeInformer.Run(wait.NeverStop)
+	log.Info("waiting to sync nodes for cluster: " + c.name)
+	for !c.nodeInformer.HasSynced() {
+	}
+	c.initialNodes = c.nodeCacheStore.ListKeys()
+	log.Info(strconv.Itoa(len(c.nodeCacheStore.List())) + " nodes synced for cluster " + c.name)
+}
+
+func (c *k8sCluster) addedNode(obj interface{}) {
+	newNode := obj.(*v1.Node)
+	var isExistingNode bool
+	for _, nodeKey := range c.initialNodes {
+		if newNode.Name == nodeKey {
+			isExistingNode = true
+			break
+		}
+	}
+	if !isExistingNode {
+		log.Info("added k8s node  --> " + c.name + " " + newNode.Name)
+		createEnvoySnapshot()
+	}
+}
+
+func (c *k8sCluster) deletedNode(obj interface{}) {
+	node := obj.(*v1.Node)
+	log.Info("deleted k8s node  --> " + c.name + " " + node.Name)
+	//TODO: delete from the intialNodes cache
 	createEnvoySnapshot()
 }
 
