@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2"
+	"github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/listener"
 	hcm "github.com/envoyproxy/go-control-plane/envoy/config/filter/network/http_connection_manager/v2"
 	envoycache "github.com/envoyproxy/go-control-plane/pkg/cache"
@@ -29,7 +31,7 @@ func TestMakeEnvoyClusters(t *testing.T) {
 	envoyClustersChan := make(chan []envoycache.Resource)
 	go makeEnvoyClusters(envoyClustersChan)
 	envoyClusters := <-envoyClustersChan
-	if len(envoyClusters) != 13 {
+	if len(envoyClusters) != 14 {
 		t.Error("Unexpected number of Envoy Clusters")
 	}
 }
@@ -41,7 +43,7 @@ func TestMakeEnvoyEndpoints_namespace1_http_cluster1_ingress1_service1_80(t *tes
 	envoyEndpoints := <-envoyEndpointsChan
 
 	// endpoint object for every cluster, even for empty cluster
-	if len(envoyEndpoints) != 13 {
+	if len(envoyEndpoints) != 14 {
 		t.Error("Unexpected number of Envoy Endpoints")
 	}
 
@@ -161,7 +163,7 @@ func TestMakeEnvoyListeners(t *testing.T) {
 	}
 }
 
-func TestMakeEnvoyListenersHttp(t *testing.T) {
+func TestMakeEnvoyListeners_http(t *testing.T) {
 	envoyListenersChan := make(chan []envoycache.Resource)
 	go makeEnvoyListeners(envoyListenersChan)
 	envoyListeners := <-envoyListenersChan
@@ -190,7 +192,7 @@ func TestMakeEnvoyListenersHttp(t *testing.T) {
 
 }
 
-func TestMakeEnvoyListenersHttps(t *testing.T) {
+func TestMakeEnvoyListeners_https(t *testing.T) {
 	envoyListenersChan := make(chan []envoycache.Resource)
 	go makeEnvoyListeners(envoyListenersChan)
 	envoyListeners := <-envoyListenersChan
@@ -199,8 +201,74 @@ func TestMakeEnvoyListenersHttps(t *testing.T) {
 		envoyListener := envoyListenerObj.(*v2.Listener)
 		if envoyListener.Name == "https" {
 			matchedTestListener = true
-			if len(envoyListener.FilterChains) != 1 {
+			if len(envoyListener.FilterChains) != 2 {
 				t.Error("Unexpected number of Envoy HTTPS FilterChains")
+			}
+		}
+	}
+
+	if !matchedTestListener {
+		t.Error("No test ran")
+	}
+}
+
+func TestMakeEnvoyListeners_https_invalid_tls_ingress(t *testing.T) {
+	envoyListenersChan := make(chan []envoycache.Resource)
+	go makeEnvoyListeners(envoyListenersChan)
+	envoyListeners := <-envoyListenersChan
+	matchedTestListener := false
+	for _, envoyListenerObj := range envoyListeners {
+		envoyListener := envoyListenerObj.(*v2.Listener)
+		if envoyListener.Name == "https" {
+			for _, filterChain := range envoyListener.FilterChains {
+				if filterChain.FilterChainMatch.ServerNames[0] == "https-invalid-tls-ingress.cluster1.k8s.io" {
+					matchedTestListener = true
+					if len(filterChain.TlsContext.CommonTlsContext.TlsCertificates) != 1 {
+						t.Error("Unexpected number of Envoy HTTPS TlsCertificates")
+					}
+					//use default cert if found invalid cert
+					certificateChain := filterChain.TlsContext.CommonTlsContext.TlsCertificates[0].CertificateChain.Specifier.(*core.DataSource_InlineBytes)
+					if !bytes.Equal(certificateChain.InlineBytes, []byte(k8sTestDataMap["cluster1"].secretList.Items[2].Data["tls.crt"])) {
+						t.Error("Unexpected Envoy HTTPS TlsCertificate")
+					}
+					privateKey := filterChain.TlsContext.CommonTlsContext.TlsCertificates[0].PrivateKey.Specifier.(*core.DataSource_InlineBytes)
+					if !bytes.Equal(privateKey.InlineBytes, []byte(k8sTestDataMap["cluster1"].secretList.Items[2].Data["tls.key"])) {
+						t.Error("Unexpected Envoy HTTPS TlsCertificate key")
+					}
+				}
+			}
+		}
+	}
+
+	if !matchedTestListener {
+		t.Error("No test ran")
+	}
+}
+
+func TestMakeEnvoyListeners_https_default_tls_ingress(t *testing.T) {
+	envoyListenersChan := make(chan []envoycache.Resource)
+	go makeEnvoyListeners(envoyListenersChan)
+	envoyListeners := <-envoyListenersChan
+	matchedTestListener := false
+	for _, envoyListenerObj := range envoyListeners {
+		envoyListener := envoyListenerObj.(*v2.Listener)
+		if envoyListener.Name == "https" {
+			for _, filterChain := range envoyListener.FilterChains {
+				if filterChain.FilterChainMatch.ServerNames[0] == "https-default-tls-ingress.cluster1.k8s.io" {
+					matchedTestListener = true
+					if len(filterChain.TlsContext.CommonTlsContext.TlsCertificates) != 1 {
+						t.Error("Unexpected number of Envoy HTTPS TlsCertificates")
+					}
+					//use default cert if found invalid cert
+					certificateChain := filterChain.TlsContext.CommonTlsContext.TlsCertificates[0].CertificateChain.Specifier.(*core.DataSource_InlineBytes)
+					if !bytes.Equal(certificateChain.InlineBytes, []byte(k8sTestDataMap["cluster1"].secretList.Items[2].Data["tls.crt"])) {
+						t.Error("Unexpected Envoy HTTPS TlsCertificate")
+					}
+					privateKey := filterChain.TlsContext.CommonTlsContext.TlsCertificates[0].PrivateKey.Specifier.(*core.DataSource_InlineBytes)
+					if !bytes.Equal(privateKey.InlineBytes, []byte(k8sTestDataMap["cluster1"].secretList.Items[2].Data["tls.key"])) {
+						t.Error("Unexpected Envoy HTTPS TlsCertificate key")
+					}
+				}
 			}
 		}
 	}
