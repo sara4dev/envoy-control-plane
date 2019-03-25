@@ -2,7 +2,10 @@ package main
 
 import (
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2"
+	"github.com/envoyproxy/go-control-plane/envoy/api/v2/listener"
+	hcm "github.com/envoyproxy/go-control-plane/envoy/config/filter/network/http_connection_manager/v2"
 	envoycache "github.com/envoyproxy/go-control-plane/pkg/cache"
+	"github.com/gogo/protobuf/types"
 	"k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -26,7 +29,7 @@ func TestMakeEnvoyClusters(t *testing.T) {
 	envoyClustersChan := make(chan []envoycache.Resource)
 	go makeEnvoyClusters(envoyClustersChan)
 	envoyClusters := <-envoyClustersChan
-	if len(envoyClusters) != 12 {
+	if len(envoyClusters) != 13 {
 		t.Error("Unexpected number of Envoy Clusters")
 	}
 }
@@ -38,7 +41,7 @@ func TestMakeEnvoyEndpoints_namespace1_http_cluster1_ingress1_service1_80(t *tes
 	envoyEndpoints := <-envoyEndpointsChan
 
 	// endpoint object for every cluster, even for empty cluster
-	if len(envoyEndpoints) != 12 {
+	if len(envoyEndpoints) != 13 {
 		t.Error("Unexpected number of Envoy Endpoints")
 	}
 
@@ -156,14 +159,54 @@ func TestMakeEnvoyListeners(t *testing.T) {
 	if len(envoyListeners) != 2 {
 		t.Error("Unexpected number of Envoy Listeners")
 	}
+}
+
+func TestMakeEnvoyListenersHttp(t *testing.T) {
+	envoyListenersChan := make(chan []envoycache.Resource)
+	go makeEnvoyListeners(envoyListenersChan)
+	envoyListeners := <-envoyListenersChan
+	matchedTestListener := false
 	for _, envoyListenerObj := range envoyListeners {
 		envoyListener := envoyListenerObj.(*v2.Listener)
 		if envoyListener.Name == "http" {
+			matchedTestListener = true
+			typedConfig := envoyListener.FilterChains[0].Filters[0].ConfigType.(*listener.Filter_TypedConfig)
+			httpConnectionManager := hcm.HttpConnectionManager{}
+			err = types.UnmarshalAny(typedConfig.TypedConfig, &httpConnectionManager)
+			if err != nil {
+				t.Error("Error in unmarshalling HttpConnectionManager")
+			}
+			httpConnectionManagerRouteConfig := httpConnectionManager.RouteSpecifier.(*hcm.HttpConnectionManager_RouteConfig)
+			if len(httpConnectionManagerRouteConfig.RouteConfig.VirtualHosts) != 8 {
+				t.Error("Unexpected number of Envoy HTTP Virtual Hosts")
+			}
 
 		}
+	}
+
+	if !matchedTestListener {
+		t.Error("No test ran")
+	}
+
+}
+
+func TestMakeEnvoyListenersHttps(t *testing.T) {
+	envoyListenersChan := make(chan []envoycache.Resource)
+	go makeEnvoyListeners(envoyListenersChan)
+	envoyListeners := <-envoyListenersChan
+	matchedTestListener := false
+	for _, envoyListenerObj := range envoyListeners {
+		envoyListener := envoyListenerObj.(*v2.Listener)
 		if envoyListener.Name == "https" {
-
+			matchedTestListener = true
+			if len(envoyListener.FilterChains) != 1 {
+				t.Error("Unexpected number of Envoy HTTPS FilterChains")
+			}
 		}
+	}
+
+	if !matchedTestListener {
+		t.Error("No test ran")
 	}
 }
 
@@ -229,14 +272,14 @@ func (c *k8sCluster) loadTestData() {
 	}
 
 	//load fake secrets
-	//reader, err = os.Open("test-data/" + c.name + "-secretList.yml")
-	//if err != nil {
-	//	log.Fatal("Failed to setup fake Secret")
-	//}
-	//err = yaml.NewYAMLOrJSONDecoder(reader, 2048).Decode(&k8sTestData.secretList)
-	//if err != nil {
-	//	log.Fatal("Failed to setup fake Secret")
-	//}
+	reader, err = os.Open("test-data/" + c.name + "-secretList.yml")
+	if err != nil {
+		log.Fatal("Failed to setup fake Secret")
+	}
+	err = yaml.NewYAMLOrJSONDecoder(reader, 2048).Decode(&k8sTestData.secretList)
+	if err != nil {
+		log.Fatal("Failed to setup fake Secret")
+	}
 
 	//load fake nodes
 	reader, err = os.Open("test-data/" + c.name + "-nodeList.yml")

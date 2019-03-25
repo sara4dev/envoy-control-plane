@@ -141,3 +141,21 @@ items:
                 serviceName: service6
                 servicePort: 80
               path: /
+- apiVersion: extensions/v1beta1
+  kind: Ingress
+  metadata:
+    name: https-invalid-tls-ingress
+    namespace: namespace7
+  spec:
+    rules:
+      - host: https-invalid-tls-ingress.cluster1.k8s.io
+        http:
+          paths:
+            - backend:
+                serviceName: service7
+                servicePort: 80
+              path: /
+    tls:
+      - hosts:
+          - https-invalid-tls-ingress.cluster1.k8s.io
+        secretName: invalidTLS
