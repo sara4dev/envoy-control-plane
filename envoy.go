@@ -27,7 +27,7 @@ import (
 	"time"
 )
 
-const grpcMaxConcurrentStreams = 1000000
+const grpcMaxConcurrentStreams = 2147483647
 
 var (
 	version            int32
@@ -37,9 +37,10 @@ var (
 )
 
 type k8sService struct {
-	name      string
-	namespace string
-	port      int32
+	name        string
+	ingressName string
+	namespace   string
+	port        int32
 }
 
 // Hasher returns node ID as an ID
@@ -182,7 +183,7 @@ func makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
 			ingress := obj.(*extbeta1.Ingress)
 			for _, ingressRule := range ingress.Spec.Rules {
 				for _, httpPath := range ingressRule.HTTP.Paths {
-					clusterName := getClusterName(k8sCluster.name, ingress.Namespace, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal)
+					clusterName := getClusterName(ingress.Namespace, ingressRule.Host, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal)
 					clusterMap[clusterName] = clusterName
 				}
 			}
@@ -190,9 +191,10 @@ func makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
 	}
 
 	for _, cluster := range clusterMap {
+		refreshDelay := time.Second * 30
 		envoyCluster := v2.Cluster{
 			Name:           cluster,
-			ConnectTimeout: time.Second * 1,
+			ConnectTimeout: time.Second * 5,
 			LbPolicy:       v2.Cluster_ROUND_ROBIN,
 			Type:           v2.Cluster_EDS,
 			EdsClusterConfig: &v2.Cluster_EdsClusterConfig{
@@ -200,6 +202,7 @@ func makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
 					ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
 						ApiConfigSource: &core.ApiConfigSource{
 							ApiType:      core.ApiConfigSource_GRPC,
+							RefreshDelay: &refreshDelay,
 							GrpcServices: grpcServices,
 						},
 					},
@@ -225,11 +228,12 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 			for _, ingressRule := range ingress.Spec.Rules {
 				for _, httpPath := range ingressRule.HTTP.Paths {
 					//TODO consider services with StrVal
-					clusterName := getClusterName(k8sCluster.name, ingress.Namespace, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal)
+					clusterName := getClusterName(ingress.Namespace, ingressRule.Host, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal)
 					k8sService := k8sService{
-						name:      httpPath.Backend.ServiceName,
-						namespace: ingress.Namespace,
-						port:      httpPath.Backend.ServicePort.IntVal,
+						name:        httpPath.Backend.ServiceName,
+						ingressName: ingress.Name,
+						namespace:   ingress.Namespace,
+						port:        httpPath.Backend.ServicePort.IntVal,
 					}
 					clusterMap[clusterName] = k8sService
 				}
@@ -240,11 +244,16 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 	for _, k8sCluster := range k8sClusters {
 		for clusterName, k8sService := range clusterMap {
 			lbEndpoints := []endpoint.LbEndpoint{}
-			serviceObj, exists, err := k8sCluster.serviceCacheStore.GetByKey(k8sService.namespace + "/" + k8sService.name)
+			localityLbEndpoint := endpoint.LocalityLbEndpoints{}
+			serviceObj, serviceExists, err := k8sCluster.serviceCacheStore.GetByKey(k8sService.namespace + "/" + k8sService.name)
 			if err != nil {
 				log.Fatal("Error in getting service by name")
 			}
-			if exists {
+			_, ingressExists, err := k8sCluster.ingressCacheStore.GetByKey(k8sService.namespace + "/" + k8sService.ingressName)
+			if err != nil {
+				log.Fatal("Error in getting ingress by name")
+			}
+			if serviceExists && ingressExists {
 				service := serviceObj.(*v1.Service)
 				if service.Spec.Type == v1.ServiceTypeNodePort {
 					for _, servicePort := range service.Spec.Ports {
@@ -272,23 +281,26 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 						}
 					}
 				}
-			}
 
-			localityLbEndpoint := endpoint.LocalityLbEndpoints{
-				Locality: &core.Locality{
-					Zone: strconv.Itoa(int(k8sCluster.zone)),
-				},
-				Priority:    k8sCluster.priority,
-				LbEndpoints: lbEndpoints,
+				localityLbEndpoint = endpoint.LocalityLbEndpoints{
+					Locality: &core.Locality{
+						Zone: strconv.Itoa(int(k8sCluster.zone)),
+					},
+					Priority:    k8sCluster.priority,
+					LbEndpoints: lbEndpoints,
+				}
+				localityLbEndpointsMap[clusterName] = append(localityLbEndpointsMap[clusterName], localityLbEndpoint)
 			}
-			localityLbEndpointsMap[clusterName] = append(localityLbEndpointsMap[clusterName], localityLbEndpoint)
 		}
 	}
 
-	for clusterName, localityLbEndpoints := range localityLbEndpointsMap {
+	// Each cluster needs an endpoint, even if its empty
+	for clusterName, _ := range clusterMap {
 		envoyEndpoint := v2.ClusterLoadAssignment{
 			ClusterName: clusterName,
-			Endpoints:   localityLbEndpoints,
+		}
+		if localityLbEndpointsMap[clusterName] != nil {
+			envoyEndpoint.Endpoints = localityLbEndpointsMap[clusterName]
 		}
 		envoyEndpoints = append(envoyEndpoints, &envoyEndpoint)
 	}
@@ -296,8 +308,9 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 	envoyEndpointsChan <- envoyEndpoints
 }
 
-func getClusterName(k8sCluster string, k8sNamespace string, k8sServiceName string, k8sServicePort int32) string {
-	return k8sCluster + "--" + k8sNamespace + "--" + k8sServiceName + "--" + fmt.Sprint(k8sServicePort)
+func getClusterName(k8sNamespace string, k8singressHost string, k8sServiceName string, k8sServicePort int32) string {
+	return k8sNamespace + ":" + k8singressHost + ":" + k8sServiceName + ":" + fmt.Sprint(k8sServicePort)
+	//return k8sNamespace + ":" + k8sServiceName + ":" + fmt.Sprint(k8sServicePort)
 }
 
 func getTLS(k8sCluster *k8sCluster, namespace string, tlsSecretName string) *auth.DownstreamTlsContext {
@@ -314,7 +327,6 @@ func getTLS(k8sCluster *k8sCluster, namespace string, tlsSecretName string) *aut
 	}
 
 	return tls
-
 }
 
 func getTLSData(k8sCluster *k8sCluster, namespace string, tlsSecretName string) *auth.TlsCertificate {
@@ -587,7 +599,7 @@ func makeVirtualHost(k8sCluster *k8sCluster, namespace string, ingressRule extbe
 						Route: &route.RouteAction{
 							//Timeout: &vhost.Timeout,
 							ClusterSpecifier: &route.RouteAction_Cluster{
-								Cluster: namespace + "--" + httpPath.Backend.ServiceName + "--" + fmt.Sprint(httpPath.Backend.ServicePort.IntVal),
+								Cluster: getClusterName(namespace, ingressRule.Host, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal),
 							},
 							//RetryPolicy: &route.RetryPolicy {
 							//	RetryOn:       "5xx",

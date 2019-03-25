@@ -7,7 +7,7 @@ items:
 - apiVersion: extensions/v1beta1
   kind: Ingress
   metadata:
-    name: http-ingress1
+    name: http-cluster1-ingress1
     namespace: namespace1
   spec:
     rules:

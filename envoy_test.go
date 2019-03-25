@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/envoyproxy/go-control-plane/envoy/api/v2"
 	envoycache "github.com/envoyproxy/go-control-plane/pkg/cache"
 	"k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
@@ -25,42 +26,146 @@ func TestMakeEnvoyClusters(t *testing.T) {
 	envoyClustersChan := make(chan []envoycache.Resource)
 	go makeEnvoyClusters(envoyClustersChan)
 	envoyClusters := <-envoyClustersChan
-	if len(envoyClusters) != 13 {
+	if len(envoyClusters) != 12 {
 		t.Error("Unexpected number of Envoy Clusters")
 	}
 }
 
-func TestMakeEnvoyEndpoints(t *testing.T) {
+func TestMakeEnvoyEndpoints_namespace1_http_cluster1_ingress1_service1_80(t *testing.T) {
 	//setupEnvoyTest()
 	envoyEndpointsChan := make(chan []envoycache.Resource)
 	go makeEnvoyEndpoints(envoyEndpointsChan)
 	envoyEndpoints := <-envoyEndpointsChan
 
 	// endpoint object for every cluster, even for empty cluster
-	if len(envoyEndpoints) != 13 {
+	if len(envoyEndpoints) != 12 {
 		t.Error("Unexpected number of Envoy Endpoints")
 	}
 
-	// endpoint for cluster cluster1--namespace6--service6--80 should be 0 as it is not a nodeport service
-	//for _, envoyEndpointObj := range envoyEndpoints {
-	//	envoyEndpoint := envoyEndpointObj.(*v2.ClusterLoadAssignment)
-	//	if envoyEndpoint.ClusterName == "cluster1--namespace6--service6--80" {
-	//		if len(envoyEndpoint.Endpoints) != 0 {
-	//			t.Error("Unexpected number of Envoy Endpoints")
-	//		}
-	//	}
-	//}
+	matchedTestCluster := false
+	//endpoint for cluster cluster1: namespace1:http-ingress1.cluster1.k8s.io:service1:80
+	for _, envoyEndpointObj := range envoyEndpoints {
+		envoyEndpoint := envoyEndpointObj.(*v2.ClusterLoadAssignment)
+		//http-ingress1.cluster1.k8s.io
+		if envoyEndpoint.ClusterName == "namespace1:http-ingress1.cluster1.k8s.io:service1:80" {
+			matchedTestCluster = true
+			// only endpoint for cluster 1 should be created
+			if len(envoyEndpoint.Endpoints) > 1 {
+				t.Error("Unexpected number of Envoy Endpoints")
+			}
+			// only LBEndpoints for cluster 1 nodes should be created
+			if len(envoyEndpoint.Endpoints[0].LbEndpoints) != 5 {
+				t.Error("Unexpected number of Envoy LbEndpoints")
+			}
+		}
+	}
+
+	if !matchedTestCluster {
+		t.Error("No test ran")
+	}
+
 }
 
-//func TestMakeEnvoyListeners(t *testing.T) {
-//	//setupEnvoyTest()
-//	envoyListenersChan := make(chan []envoycache.Resource)
-//	go makeEnvoyListeners(envoyListenersChan)
-//	envoyListeners := <-envoyListenersChan
-//	if len(envoyListeners) != 1 {
-//		t.Error("No Envoy Listeners created")
-//	}
-//}
+func TestMakeEnvoyEndpoints_namespace1_http_cluster2_ingress1_service1_80(t *testing.T) {
+	envoyEndpointsChan := make(chan []envoycache.Resource)
+	go makeEnvoyEndpoints(envoyEndpointsChan)
+	envoyEndpoints := <-envoyEndpointsChan
+
+	matchedTestCluster := false
+	for _, envoyEndpointObj := range envoyEndpoints {
+		envoyEndpoint := envoyEndpointObj.(*v2.ClusterLoadAssignment)
+		if envoyEndpoint.ClusterName == "namespace1:http-ingress1.cluster2.k8s.io:service1:80" {
+			matchedTestCluster = true
+			// only endpoint for cluster 2 should be created
+			if len(envoyEndpoint.Endpoints) > 1 {
+				t.Error("Unexpected number of Envoy Endpoints")
+			}
+			// only LBEndpoints for cluster 2 nodes should be created
+			if len(envoyEndpoint.Endpoints[0].LbEndpoints) != 2 {
+				t.Error("Unexpected number of Envoy LbEndpoints")
+			}
+		}
+	}
+
+	if !matchedTestCluster {
+		t.Error("No test ran")
+	}
+}
+
+func TestMakeEnvoyEndpoints_namespace2_http_cross_cluster_ingress_service2_80(t *testing.T) {
+	envoyEndpointsChan := make(chan []envoycache.Resource)
+	go makeEnvoyEndpoints(envoyEndpointsChan)
+	envoyEndpoints := <-envoyEndpointsChan
+
+	matchedTestCluster := false
+	for _, envoyEndpointObj := range envoyEndpoints {
+		envoyEndpoint := envoyEndpointObj.(*v2.ClusterLoadAssignment)
+		//endpoint for cluster cluster1/2: namespace2:http-cross-cluster-ingress.k8s.io:service2:80 should be multi cluster ingress
+		if envoyEndpoint.ClusterName == "namespace2:http-cross-cluster-ingress.k8s.io:service2:80" {
+			matchedTestCluster = true
+			if len(envoyEndpoint.Endpoints) != 2 {
+				t.Error("Unexpected number of Envoy Endpoints")
+			}
+
+			// only LBEndpoints for cluster 1 nodes should be created
+			if len(envoyEndpoint.Endpoints[0].LbEndpoints) != 5 {
+				t.Error("Unexpected number of Envoy LbEndpoints")
+			}
+
+			// only LBEndpoints for cluster 2 nodes should be created
+			if len(envoyEndpoint.Endpoints[1].LbEndpoints) != 2 {
+				t.Error("Unexpected number of Envoy LbEndpoints")
+			}
+		}
+	}
+
+	if !matchedTestCluster {
+		t.Error("No test ran")
+	}
+}
+
+func TestMakeEnvoyEndpoints_namespace6_http_clusterip_service_ingress_service6_80(t *testing.T) {
+	envoyEndpointsChan := make(chan []envoycache.Resource)
+	go makeEnvoyEndpoints(envoyEndpointsChan)
+	envoyEndpoints := <-envoyEndpointsChan
+
+	matchedTestCluster := false
+	for _, envoyEndpointObj := range envoyEndpoints {
+		envoyEndpoint := envoyEndpointObj.(*v2.ClusterLoadAssignment)
+		//endpoint for cluster cluster1: namespace6:http-clusterip-service-ingress.cluster1.k8s.io:service6:80 should be 0 as it is not a nodeport service
+		if envoyEndpoint.ClusterName == "namespace6:http-clusterip-service-ingress.cluster1.k8s.io:service6:80" {
+			matchedTestCluster = true
+			for _, endPoint := range envoyEndpoint.Endpoints {
+				if len(endPoint.LbEndpoints) != 0 {
+					t.Error("Unexpected number of Envoy LbEndpoints")
+				}
+			}
+		}
+	}
+
+	if !matchedTestCluster {
+		t.Error("No test ran")
+	}
+}
+
+func TestMakeEnvoyListeners(t *testing.T) {
+	//setupEnvoyTest()
+	envoyListenersChan := make(chan []envoycache.Resource)
+	go makeEnvoyListeners(envoyListenersChan)
+	envoyListeners := <-envoyListenersChan
+	if len(envoyListeners) != 2 {
+		t.Error("Unexpected number of Envoy Listeners")
+	}
+	for _, envoyListenerObj := range envoyListeners {
+		envoyListener := envoyListenerObj.(*v2.Listener)
+		if envoyListener.Name == "http" {
+
+		}
+		if envoyListener.Name == "https" {
+
+		}
+	}
+}
 
 func setupEnvoyTest() {
 
@@ -82,6 +187,7 @@ func setupEnvoyTest() {
 		k8sCluster.ingressCacheStore = &k8scache.FakeCustomStore{
 			ListKeysFunc: k8sCluster.fakeIngressKeys,
 			ListFunc:     k8sCluster.fakeIngresses,
+			GetByKeyFunc: k8sCluster.fakeIngressByKey,
 		}
 		k8sCluster.serviceCacheStore = &k8scache.FakeCustomStore{
 			ListKeysFunc: k8sCluster.fakeServiceKeys,
@@ -179,6 +285,19 @@ func (c *k8sCluster) fakeNodes() []interface{} {
 		nodeObjects = append(nodeObjects, &fakeNodes[i])
 	}
 	return nodeObjects
+}
+
+func (c *k8sCluster) fakeIngressByKey(key string) (interface{}, bool, error) {
+	for _, ingress := range k8sTestDataMap[c.name].ingressList.Items {
+		namespace, name, err := k8scache.SplitMetaNamespaceKey(key)
+		if err != nil {
+			log.Fatal("Error while splittig the metanamespace key")
+		}
+		if ingress.Namespace == namespace && ingress.Name == name {
+			return &ingress, true, nil
+		}
+	}
+	return nil, false, nil
 }
 
 func (c *k8sCluster) fakeSecretByKey(key string) (interface{}, bool, error) {

@@ -59,6 +59,7 @@ func (c *k8sCluster) startK8sControllers(kubeConfigPath string) error {
 		return err
 	}
 	watchNamespaces = v1.NamespaceAll
+	//watchNamespaces = "kube-system"
 	c.watchIngresses(resyncPeriod)
 	c.watchServices(resyncPeriod)
 	c.watchSecrets(resyncPeriod)
