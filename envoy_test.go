@@ -10,10 +10,8 @@ import (
 	"github.com/gogo/protobuf/types"
 	"k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
-	"k8s.io/apimachinery/pkg/util/yaml"
 	k8scache "k8s.io/client-go/tools/cache"
 	"log"
-	"os"
 	"testing"
 )
 
@@ -76,44 +74,16 @@ func (c *k8sCluster) loadTestData() {
 	k8sTestData := k8sTestData{}
 
 	//load fake ingresses
-	reader, err := os.Open("test-data/" + c.name + "-ingressList.yml")
-	if err != nil {
-		log.Fatal("Failed to setup fake Ingress")
-	}
-	err = yaml.NewYAMLOrJSONDecoder(reader, 2048).Decode(&k8sTestData.ingressList)
-	if err != nil {
-		log.Fatal("Failed to setup fake Ingress")
-	}
+	loadObjFromFile("test-data/"+c.name+"-ingressList.yml", &k8sTestData.ingressList)
 
 	//load fake services
-	reader, err = os.Open("test-data/" + c.name + "-serviceList.yml")
-	if err != nil {
-		log.Fatal("Failed to setup fake Service")
-	}
-	err = yaml.NewYAMLOrJSONDecoder(reader, 2048).Decode(&k8sTestData.serviceList)
-	if err != nil {
-		log.Fatal("Failed to setup fake Service")
-	}
+	loadObjFromFile("test-data/"+c.name+"-serviceList.yml", &k8sTestData.serviceList)
 
 	//load fake secrets
-	reader, err = os.Open("test-data/" + c.name + "-secretList.yml")
-	if err != nil {
-		log.Fatal("Failed to setup fake Secret")
-	}
-	err = yaml.NewYAMLOrJSONDecoder(reader, 2048).Decode(&k8sTestData.secretList)
-	if err != nil {
-		log.Fatal("Failed to setup fake Secret")
-	}
+	loadObjFromFile("test-data/"+c.name+"-secretList.yml", &k8sTestData.secretList)
 
 	//load fake nodes
-	reader, err = os.Open("test-data/" + c.name + "-nodeList.yml")
-	if err != nil {
-		log.Fatal("Failed to setup fake nodes")
-	}
-	err = yaml.NewYAMLOrJSONDecoder(reader, 2048).Decode(&k8sTestData.nodeList)
-	if err != nil {
-		log.Fatal("Failed to setup fake nodes")
-	}
+	loadObjFromFile("test-data/"+c.name+"-nodeList.yml", &k8sTestData.nodeList)
 
 	k8sTestDataMap[c.name] = k8sTestData
 }
