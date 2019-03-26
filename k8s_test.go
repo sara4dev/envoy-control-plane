@@ -41,7 +41,7 @@ func TestAddedIngress_new_ingress_added(t *testing.T) {
 	for _, k8sCluster := range k8sClusters {
 		newIngress := extbeta1.Ingress{}
 		loadObjFromFile("test-data/"+k8sCluster.name+"-newIngress.yml", &newIngress)
-		k8sCluster.addedIngress(&newIngress)
+		k8sCluster.addedObj(&newIngress)
 		//Check if the Envoy Snapshot is called for new ingress
 		if envoyCluster.version != i {
 			t.Error("Envoy Snapshot is not called")
@@ -57,7 +57,7 @@ func TestAddedIngress_initial_ingress_added(t *testing.T) {
 	for _, k8sCluster := range k8sClusters {
 		newIngress := extbeta1.Ingress{}
 		loadObjFromFile("test-data/"+k8sCluster.name+"-initialIngress.yml", &newIngress)
-		k8sCluster.addedIngress(&newIngress)
+		k8sCluster.addedObj(&newIngress)
 		//Check if the Envoy Snapshot is NOT called for initial existing ingress
 		if envoyCluster.version != 0 {
 			t.Error("Envoy Snapshot should not be called")
@@ -77,7 +77,7 @@ func TestUpdatedIngress_new_ingress_updated(t *testing.T) {
 		newObj := extbeta1.Ingress{}
 		loadObjFromFile("test-data/"+k8sCluster.name+"-newIngress-updated.yml", &newObj)
 
-		k8sCluster.updatedIngress(&oldObj, &newObj)
+		k8sCluster.updatedObj(&oldObj, &newObj)
 		//Check if the Envoy Snapshot is called for updated ingress
 		if envoyCluster.version != i {
 			t.Error("Envoy Snapshot is not called")
@@ -97,7 +97,7 @@ func TestUpdatedIngress_new_ingress_status_updated(t *testing.T) {
 		newObj := extbeta1.Ingress{}
 		loadObjFromFile("test-data/"+k8sCluster.name+"-newIngress-statusUpdated.yml", &newObj)
 
-		k8sCluster.updatedIngress(&oldObj, &newObj)
+		k8sCluster.updatedObj(&oldObj, &newObj)
 		//Check if the Envoy Snapshot is NOT called for status updates
 		if envoyCluster.version != 0 {
 			t.Error("Envoy Snapshot should not be called")
@@ -115,7 +115,7 @@ func TestDeletedIngress_delete_initial_ingress(t *testing.T) {
 		delObj := extbeta1.Ingress{}
 		loadObjFromFile("test-data/"+k8sCluster.name+"-initialIngress.yml", &delObj)
 
-		k8sCluster.deletedIngress(&delObj)
+		k8sCluster.deletedObj(&delObj)
 		//Check if the Envoy Snapshot is NOT called for status updates
 		if envoyCluster.version != i {
 			t.Error("Envoy Snapshot is not called")

@@ -1,7 +1,7 @@
 apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
-  name: new ing
+  name: new-ing
   namespace: namespace7
 spec:
   rules:
