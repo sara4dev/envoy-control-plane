@@ -253,7 +253,7 @@ func TestMakeEnvoyEndpoints_namespace1_http_cluster1_ingress1_service1_80(t *tes
 	}
 
 	if !matchedTestCluster {
-		t.Error("No test ran")
+		t.Error("No tests ran")
 	}
 
 }
@@ -280,7 +280,7 @@ func TestMakeEnvoyEndpoints_namespace1_http_cluster2_ingress1_service1_80(t *tes
 	}
 
 	if !matchedTestCluster {
-		t.Error("No test ran")
+		t.Error("No tests ran")
 	}
 }
 
@@ -312,7 +312,7 @@ func TestMakeEnvoyEndpoints_namespace2_http_cross_cluster_ingress_service2_80(t 
 	}
 
 	if !matchedTestCluster {
-		t.Error("No test ran")
+		t.Error("No tests ran")
 	}
 }
 
@@ -336,7 +336,7 @@ func TestMakeEnvoyEndpoints_namespace6_http_clusterip_service_ingress_service6_8
 	}
 
 	if !matchedTestCluster {
-		t.Error("No test ran")
+		t.Error("No tests ran")
 	}
 }
 
@@ -374,7 +374,7 @@ func TestMakeEnvoyListeners_http(t *testing.T) {
 	}
 
 	if !matchedTestListener {
-		t.Error("No test ran")
+		t.Error("No tests ran")
 	}
 
 }
@@ -395,7 +395,7 @@ func TestMakeEnvoyListeners_https(t *testing.T) {
 	}
 
 	if !matchedTestListener {
-		t.Error("No test ran")
+		t.Error("No tests ran")
 	}
 }
 
@@ -428,7 +428,7 @@ func TestMakeEnvoyListeners_https_invalid_tls_ingress(t *testing.T) {
 	}
 
 	if !matchedTestListener {
-		t.Error("No test ran")
+		t.Error("No tests ran")
 	}
 }
 
@@ -461,7 +461,7 @@ func TestMakeEnvoyListeners_https_default_tls_ingress(t *testing.T) {
 	}
 
 	if !matchedTestListener {
-		t.Error("No test ran")
+		t.Error("No tests ran")
 	}
 }
 
@@ -494,6 +494,6 @@ func TestMakeEnvoyListeners_https_valid_tls_ingress(t *testing.T) {
 	}
 
 	if !matchedTestListener {
-		t.Error("No test ran")
+		t.Error("No tests ran")
 	}
 }
