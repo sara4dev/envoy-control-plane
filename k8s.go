@@ -60,6 +60,7 @@ func (c *k8sCluster) startK8sControllers(kubeConfigPath string) error {
 	}
 	watchNamespaces = v1.NamespaceAll
 	//watchNamespaces = "kube-system"
+	//watchNamespaces = "snp-hubble-dev"
 	c.watchIngresses(resyncPeriod)
 	c.watchServices(resyncPeriod)
 	c.watchSecrets(resyncPeriod)
@@ -179,7 +180,7 @@ func (c *k8sCluster) deletedService(obj interface{}) {
 }
 
 func (c *k8sCluster) watchSecrets(resyncPeriod time.Duration) {
-	lw := k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "secrets", "kube-system", fields.Everything())
+	lw := k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "secrets", watchNamespaces, fields.Everything())
 	c.secretInformer = k8scache.NewSharedInformer(lw, &v1.Secret{}, resyncPeriod)
 	c.secretCacheStore = c.secretInformer.GetStore()
 	//Run the controller as a goroutine
@@ -214,7 +215,7 @@ func (c *k8sCluster) updatedSecret(oldObj interface{}, newObj interface{}) {
 }
 
 func (c *k8sCluster) deletedSecret(obj interface{}) {
-	secret := obj.(*v1.Service)
+	secret := obj.(*v1.Secret)
 	log.Info("deleted k8s Secret  --> " + c.name + ":" + secret.Namespace + ":" + secret.Name)
 	//TODO: delete from the intialServices cache
 	createEnvoySnapshot()

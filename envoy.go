@@ -517,6 +517,9 @@ func makeEnvoyHttpsListerners(envoyHttpsListenersChan chan []envoycache.Resource
 		}
 	}
 	for _, value := range listenerFilerChainsMap {
+		if len(value.TlsContext.CommonTlsContext.TlsCertificates) == 0 && value.TlsContext.CommonTlsContext.TlsCertificates[0].CertificateChain == nil {
+			log.Fatal("No certificate found for " + value.FilterChainMatch.ServerNames[0])
+		}
 		listenerFilerChains = append(listenerFilerChains, value)
 	}
 	envoyListener := &v2.Listener{
