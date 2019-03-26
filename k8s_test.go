@@ -3,6 +3,7 @@ package main
 import (
 	envoycache "github.com/envoyproxy/go-control-plane/pkg/cache"
 	extbeta1 "k8s.io/api/extensions/v1beta1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"log"
 	"os"
@@ -74,20 +75,60 @@ func TestAddedIngress_new_ingress_added(t *testing.T) {
 	}
 	var i int32 = 1
 	for _, k8sCluster := range k8sClusters {
-		reader, err := os.Open("test-data/" + k8sCluster.name + "-newIngress.yml")
-		if err != nil {
-			log.Fatal("Failed to setup fake Ingress")
-		}
 		newIngress := extbeta1.Ingress{}
-		err = yaml.NewYAMLOrJSONDecoder(reader, 2048).Decode(&newIngress)
-		if err != nil {
-			log.Fatal("Failed to setup fake Ingress")
-		}
+		loadObjFromFile("test-data/"+k8sCluster.name+"-newIngress.yml", &newIngress)
 		k8sCluster.addedIngress(&newIngress)
-		//Check of the Envoy Snapshot is called for new ingress
+		//Check if the Envoy Snapshot is called for new ingress
 		if envoyCluster.version != i {
 			t.Error("Envoy Snapshot is not called")
 		}
 		i++
+	}
+}
+
+func TestAddedIngress_initial_ingress_added(t *testing.T) {
+	envoyCluster = EnvoyCluster{
+		envoySnapshotCache: &fakeSnapshotCache{},
+	}
+	for _, k8sCluster := range k8sClusters {
+		newIngress := extbeta1.Ingress{}
+		loadObjFromFile("test-data/"+k8sCluster.name+"-initialIngress.yml", &newIngress)
+		k8sCluster.addedIngress(&newIngress)
+		//Check if the Envoy Snapshot is NOT called for initial existing ingress
+		if envoyCluster.version != 0 {
+			t.Error("Envoy Snapshot should not be called")
+		}
+	}
+}
+
+func TestAddedIngress_new_ingress_updated(t *testing.T) {
+	envoyCluster = EnvoyCluster{
+		envoySnapshotCache: &fakeSnapshotCache{},
+	}
+	var i int32 = 1
+	for _, k8sCluster := range k8sClusters {
+		oldObj := extbeta1.Ingress{}
+		loadObjFromFile("test-data/"+k8sCluster.name+"-newIngress.yml", &oldObj)
+
+		newObj := extbeta1.Ingress{}
+		loadObjFromFile("test-data/"+k8sCluster.name+"-newIngress.yml", &newObj)
+
+		k8sCluster.updatedIngress(&oldObj, &newObj)
+		//Check if the Envoy Snapshot is called for updated ingress
+		if envoyCluster.version != i {
+			t.Error("Envoy Snapshot should not be called")
+		}
+		i++
+	}
+}
+
+func loadObjFromFile(fileName string, obj runtime.Object) {
+	reader, err := os.Open(fileName)
+	if err != nil {
+		log.Fatal("Failed to open file " + fileName)
+	}
+	err = yaml.NewYAMLOrJSONDecoder(reader, 2048).Decode(&obj)
+	if err != nil {
+		log.Fatal("Failed to parse obj: " + obj.GetObjectKind().GroupVersionKind().Kind)
 	}
 }

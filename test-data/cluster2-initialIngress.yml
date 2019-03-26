@@ -1,0 +1,14 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: http-cross-cluster-ingress
+  namespace: namespace2
+spec:
+  rules:
+    - host: http-cross-cluster-ingress.k8s.io
+      http:
+        paths:
+          - backend:
+              serviceName: service2
+              servicePort: 80
+            path: /
