@@ -14,9 +14,9 @@ import (
 	"golang.org/x/net/context"
 )
 
-type k8sController struct {
-	clusterName string
-}
+//type k8sController struct {
+//	clusterName string
+//}
 
 var envoyCluster EnvoyCluster
 

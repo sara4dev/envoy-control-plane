@@ -1,0 +1,22 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: new ing
+  namespace: namespace7
+spec:
+  rules:
+    - host: https-valid-tls-ingress.cluster1.k8s.io
+      http:
+        paths:
+          - backend:
+              serviceName: service7
+              servicePort: 80
+            path: /
+  tls:
+    - hosts:
+        - https-valid-tls-ingress.cluster1.k8s.io
+      secretName: validTLS
+status:
+  loadBalancer:
+    ingress:
+      - {}

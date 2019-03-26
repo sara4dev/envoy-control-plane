@@ -2,20 +2,22 @@ package main
 
 import (
 	"fmt"
-	"k8s.io/apimachinery/pkg/fields"
-	"strconv"
-	"strings"
-	"time"
-
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
 	extbeta1 "k8s.io/api/extensions/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
 	k8scache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type zone int
@@ -107,25 +109,29 @@ func (c *k8sCluster) watchIngresses(resyncPeriod time.Duration) {
 
 func (c *k8sCluster) addedIngress(obj interface{}) {
 	newIngress := obj.(*extbeta1.Ingress)
-	var isExistingIngress bool
 	for _, key := range c.initialIngresses {
 		namespace, name, err := k8scache.SplitMetaNamespaceKey(key)
 		if err != nil {
 			log.Fatal("Error while splittig the metanamespace key")
 		}
 		if newIngress.Namespace == namespace && newIngress.Name == name {
-			isExistingIngress = true
-			break
+			log.Info("Skipping existing ingress")
+			return
 		}
 	}
-	if !isExistingIngress {
-		log.Info("added k8s ingress  --> " + c.name + ":" + newIngress.Namespace + ":" + newIngress.Name)
-		envoyCluster.createEnvoySnapshot()
-	}
+
+	log.Info("added k8s ingress  --> " + c.name + ":" + newIngress.Namespace + ":" + newIngress.Name)
+	envoyCluster.createEnvoySnapshot()
 }
 
 func (c *k8sCluster) updatedIngress(oldObj interface{}, newObj interface{}) {
 	oldIngress := oldObj.(*extbeta1.Ingress)
+	if cmp.Equal(oldObj, newObj,
+		cmpopts.IgnoreFields(extbeta1.Ingress{}, "Status"),
+		cmpopts.IgnoreFields(metav1.ObjectMeta{}, "ResourceVersion")) {
+		log.Info("skipping update, only status has changed")
+		return
+	}
 	log.Info("updated k8s ingress  --> " + c.name + ":" + oldIngress.Namespace + ":" + oldIngress.Name)
 	envoyCluster.createEnvoySnapshot()
 }

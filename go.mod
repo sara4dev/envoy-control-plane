@@ -4,12 +4,12 @@ go 1.12
 
 require (
 	github.com/envoyproxy/go-control-plane v0.6.8
-	github.com/evanphx/json-patch v4.1.0+incompatible // indirect
 	github.com/gogo/googleapis v1.1.0 // indirect
 	github.com/gogo/protobuf v1.2.1
 	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
 	github.com/golang/protobuf v1.3.0 // indirect
 	github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c // indirect
+	github.com/google/go-cmp v0.2.0
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf // indirect
 	github.com/googleapis/gnostic v0.2.0 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190212212710-3befbb6ad0cc // indirect
@@ -41,6 +41,5 @@ require (
 	k8s.io/apimachinery v0.0.0-20190309062729-b6b933fb33e6
 	k8s.io/client-go v10.0.0+incompatible
 	k8s.io/klog v0.2.0 // indirect
-	k8s.io/kube-openapi v0.0.0-20190320154901-5e45bb682580 // indirect
 	sigs.k8s.io/yaml v1.1.0 // indirect
 )
