@@ -29,12 +29,11 @@ import (
 
 const grpcMaxConcurrentStreams = 2147483647
 
-var (
-	version            int32
+type EnvoyCluster struct {
 	envoySnapshotCache envoycache.SnapshotCache
-	//tlsDataCache       map[string]auth.TlsCertificate
-	tlsDataCache sync.Map
-)
+	version            int32
+	tlsDataCache       sync.Map
+}
 
 type k8sService struct {
 	name        string
@@ -139,10 +138,10 @@ func RunManagementServer(ctx context.Context, server server.Server, port uint) {
 	grpcServer.GracefulStop()
 }
 
-func createEnvoySnapshot() {
-	atomic.AddInt32(&version, 1)
+func (envoyCluster *EnvoyCluster) createEnvoySnapshot() {
+	atomic.AddInt32(&envoyCluster.version, 1)
 	//nodeId := envoySnapshotCache.GetStatusKeys()[0]
-	log.Infof(">>>>>>>>>>>>>>>>>>> creating snapshot Version " + fmt.Sprint(version))
+	log.Infof(">>>>>>>>>>>>>>>>>>> creating snapshot Version " + fmt.Sprint(envoyCluster.version))
 
 	envoyListenersChan := make(chan []envoycache.Resource)
 	envoyClustersChan := make(chan []envoycache.Resource)
@@ -156,10 +155,9 @@ func createEnvoySnapshot() {
 	envoyEndpoints := <-envoyEndpointsChan
 	envoyClusters := <-envoyClustersChan
 
-	snap := envoycache.NewSnapshot(fmt.Sprint(version), envoyEndpoints, envoyClusters, nil, envoyListeners)
+	snap := envoycache.NewSnapshot(fmt.Sprint(envoyCluster.version), envoyEndpoints, envoyClusters, nil, envoyListeners)
 
-	envoySnapshotCache.SetSnapshot("k8s_ingress", snap)
-
+	envoyCluster.envoySnapshotCache.SetSnapshot("k8s_ingress", snap)
 }
 
 func makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
@@ -332,7 +330,7 @@ func getTLS(k8sCluster *k8sCluster, namespace string, tlsSecretName string) *aut
 func getTLSData(k8sCluster *k8sCluster, namespace string, tlsSecretName string) *auth.TlsCertificate {
 	key := k8sCluster.name + "--" + namespace + "--" + tlsSecretName
 	tlsCertificate := auth.TlsCertificate{}
-	value, ok := tlsDataCache.Load(key)
+	value, ok := envoyCluster.tlsDataCache.Load(key)
 	if ok {
 		tlsCertificate = value.(auth.TlsCertificate)
 	} else {
@@ -368,7 +366,7 @@ func getTLSData(k8sCluster *k8sCluster, namespace string, tlsSecretName string) 
 			}
 
 			//TODO how to update the cache if the TLS changes?
-			tlsDataCache.Store(key, tlsCertificate)
+			envoyCluster.tlsDataCache.Store(key, tlsCertificate)
 		}
 	}
 	return &tlsCertificate

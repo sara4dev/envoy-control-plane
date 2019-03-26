@@ -120,21 +120,21 @@ func (c *k8sCluster) addedIngress(obj interface{}) {
 	}
 	if !isExistingIngress {
 		log.Info("added k8s ingress  --> " + c.name + ":" + newIngress.Namespace + ":" + newIngress.Name)
-		createEnvoySnapshot()
+		envoyCluster.createEnvoySnapshot()
 	}
 }
 
 func (c *k8sCluster) updatedIngress(oldObj interface{}, newObj interface{}) {
 	oldIngress := oldObj.(*extbeta1.Ingress)
 	log.Info("updated k8s ingress  --> " + c.name + ":" + oldIngress.Namespace + ":" + oldIngress.Name)
-	createEnvoySnapshot()
+	envoyCluster.createEnvoySnapshot()
 }
 
 func (c *k8sCluster) deletedIngress(obj interface{}) {
 	ingress := obj.(*extbeta1.Ingress)
 	log.Info("deleted k8s ingress  --> " + c.name + ":" + ingress.Namespace + ":" + ingress.Name)
 	//TODO: delete from the intialIngress cache
-	createEnvoySnapshot()
+	envoyCluster.createEnvoySnapshot()
 }
 
 func (c *k8sCluster) watchServices(resyncPeriod time.Duration) {
@@ -162,21 +162,21 @@ func (c *k8sCluster) addedService(obj interface{}) {
 	}
 	if !isExistingIngress {
 		log.Info("added k8s services  --> " + c.name + ":" + newService.Namespace + ":" + newService.Name)
-		createEnvoySnapshot()
+		envoyCluster.createEnvoySnapshot()
 	}
 }
 
 func (c *k8sCluster) updatedService(oldObj interface{}, newObj interface{}) {
 	service := oldObj.(*v1.Service)
 	log.Info("updated k8s services  --> " + c.name + ":" + service.Namespace + ":" + service.Name)
-	createEnvoySnapshot()
+	envoyCluster.createEnvoySnapshot()
 }
 
 func (c *k8sCluster) deletedService(obj interface{}) {
 	service := obj.(*v1.Service)
 	log.Info("deleted k8s services  --> " + c.name + ":" + service.Namespace + ":" + service.Name)
 	//TODO: delete from the intialServices cache
-	createEnvoySnapshot()
+	envoyCluster.createEnvoySnapshot()
 }
 
 func (c *k8sCluster) watchSecrets(resyncPeriod time.Duration) {
@@ -204,21 +204,21 @@ func (c *k8sCluster) addedSecret(obj interface{}) {
 	}
 	if !isExistingIngress {
 		log.Info("added k8s Secret  --> " + c.name + ":" + newSecret.Namespace + ":" + newSecret.Name)
-		createEnvoySnapshot()
+		envoyCluster.createEnvoySnapshot()
 	}
 }
 
 func (c *k8sCluster) updatedSecret(oldObj interface{}, newObj interface{}) {
 	secret := oldObj.(*v1.Secret)
 	log.Info("updated k8s Secret  --> " + c.name + ":" + secret.Namespace + ":" + secret.Name)
-	createEnvoySnapshot()
+	envoyCluster.createEnvoySnapshot()
 }
 
 func (c *k8sCluster) deletedSecret(obj interface{}) {
 	secret := obj.(*v1.Secret)
 	log.Info("deleted k8s Secret  --> " + c.name + ":" + secret.Namespace + ":" + secret.Name)
 	//TODO: delete from the intialServices cache
-	createEnvoySnapshot()
+	envoyCluster.createEnvoySnapshot()
 }
 
 func (c *k8sCluster) watchNodes(resyncPeriod time.Duration) {
@@ -245,7 +245,7 @@ func (c *k8sCluster) addedNode(obj interface{}) {
 	}
 	if !isExistingNode {
 		log.Info("added k8s node  --> " + c.name + " " + newNode.Name)
-		createEnvoySnapshot()
+		envoyCluster.createEnvoySnapshot()
 	}
 }
 
@@ -253,7 +253,7 @@ func (c *k8sCluster) deletedNode(obj interface{}) {
 	node := obj.(*v1.Node)
 	log.Info("deleted k8s node  --> " + c.name + " " + node.Name)
 	//TODO: delete from the intialNodes cache
-	createEnvoySnapshot()
+	envoyCluster.createEnvoySnapshot()
 }
 
 // NewKubeClient k8s client.

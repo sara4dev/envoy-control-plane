@@ -18,6 +18,8 @@ type k8sController struct {
 	clusterName string
 }
 
+var envoyCluster EnvoyCluster
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "envoy-control-plane"
@@ -73,10 +75,11 @@ func run(ctx *cli.Context) error {
 	}
 	signal = make(chan struct{})
 	cb := &callbacks{signal: signal}
-	envoySnapshotCache = envoycache.NewSnapshotCache(false, Hasher{}, logger{})
-	srv := server.NewServer(envoySnapshotCache, cb)
+	envoyCluster = EnvoyCluster{}
+	envoyCluster.envoySnapshotCache = envoycache.NewSnapshotCache(false, Hasher{}, logger{})
+	srv := server.NewServer(envoyCluster.envoySnapshotCache, cb)
 	//create the first envoy snapshot
-	createEnvoySnapshot()
+	envoyCluster.createEnvoySnapshot()
 	//start the events to k8s controllers to start watching the events
 	for _, k8sCluster := range k8sClusters {
 		k8sCluster.addK8sEventHandlers()

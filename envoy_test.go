@@ -50,19 +50,25 @@ func setupEnvoyTest() {
 			ListFunc:     k8sCluster.fakeIngresses,
 			GetByKeyFunc: k8sCluster.fakeIngressByKey,
 		}
+		k8sCluster.initialIngresses = k8sCluster.ingressCacheStore.ListKeys()
 		k8sCluster.serviceCacheStore = &k8scache.FakeCustomStore{
 			ListKeysFunc: k8sCluster.fakeServiceKeys,
 			ListFunc:     k8sCluster.fakeServices,
 			GetByKeyFunc: k8sCluster.fakeServiceByKey,
 		}
+		k8sCluster.initialServices = k8sCluster.serviceCacheStore.ListKeys()
 		k8sCluster.secretCacheStore = &k8scache.FakeCustomStore{
 			ListKeysFunc: k8sCluster.fakeSecretKeys,
 			ListFunc:     k8sCluster.fakeSecrets,
 			GetByKeyFunc: k8sCluster.fakeSecretByKey,
 		}
+		k8sCluster.initialSecrets = k8sCluster.secretCacheStore.ListKeys()
 		k8sCluster.nodeCacheStore = &k8scache.FakeCustomStore{
-			ListFunc: k8sCluster.fakeNodes,
+			ListKeysFunc: k8sCluster.fakeNodeKeys,
+			ListFunc:     k8sCluster.fakeNodes,
+			GetByKeyFunc: k8sCluster.fakeNodeByKey,
 		}
+		k8sCluster.initialNodes = k8sCluster.nodeCacheStore.ListKeys()
 	}
 }
 
@@ -187,6 +193,15 @@ func (c *k8sCluster) fakeServiceByKey(key string) (interface{}, bool, error) {
 	return nil, false, nil
 }
 
+func (c *k8sCluster) fakeNodeByKey(key string) (interface{}, bool, error) {
+	for _, node := range k8sTestDataMap[c.name].nodeList.Items {
+		if node.Name == key {
+			return &node, true, nil
+		}
+	}
+	return nil, false, nil
+}
+
 func (c *k8sCluster) fakeIngressKeys() []string {
 	keys := []string{}
 	for _, obj := range k8sTestDataMap[c.name].ingressList.Items {
@@ -207,6 +222,14 @@ func (c *k8sCluster) fakeSecretKeys() []string {
 	keys := []string{}
 	for _, obj := range k8sTestDataMap[c.name].secretList.Items {
 		keys = append(keys, obj.Namespace+"/"+obj.Name)
+	}
+	return keys
+}
+
+func (c *k8sCluster) fakeNodeKeys() []string {
+	keys := []string{}
+	for _, obj := range k8sTestDataMap[c.name].nodeList.Items {
+		keys = append(keys, obj.Name)
 	}
 	return keys
 }
