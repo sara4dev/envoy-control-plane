@@ -139,7 +139,19 @@ func (c *k8sCluster) updatedIngress(oldObj interface{}, newObj interface{}) {
 func (c *k8sCluster) deletedIngress(obj interface{}) {
 	ingress := obj.(*extbeta1.Ingress)
 	log.Info("deleted k8s ingress  --> " + c.name + ":" + ingress.Namespace + ":" + ingress.Name)
-	//TODO: delete from the intialIngress cache
+	var index int
+	var key string
+	for index, key = range c.initialIngresses {
+		namespace, name, err := k8scache.SplitMetaNamespaceKey(key)
+		if err != nil {
+			log.Fatal("Error while splittig the metanamespace key")
+		}
+		if ingress.Namespace == namespace && ingress.Name == name {
+			//delete from the intialIngress cache
+			c.initialIngresses = append(c.initialIngresses[:index], c.initialIngresses[index+1:]...)
+			break
+		}
+	}
 	envoyCluster.createEnvoySnapshot()
 }
 
