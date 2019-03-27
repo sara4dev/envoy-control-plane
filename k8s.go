@@ -49,7 +49,6 @@ type k8sCluster struct {
 var (
 	k8sClusters     []*k8sCluster
 	resyncPeriod    time.Duration
-	signal          chan struct{}
 	err             error
 	watchNamespaces string
 )

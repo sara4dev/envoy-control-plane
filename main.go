@@ -73,7 +73,7 @@ func run(ctx *cli.Context) error {
 			log.Fatal("Fatal Error occurred: " + err.Error())
 		}
 	}
-	signal = make(chan struct{})
+	signal := make(chan struct{})
 	cb := &callbacks{signal: signal}
 	envoyCluster = EnvoyCluster{}
 	envoyCluster.envoySnapshotCache = envoycache.NewSnapshotCache(false, Hasher{}, logger{})
