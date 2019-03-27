@@ -5,6 +5,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	log "github.com/sirupsen/logrus"
+	"github.com/urfave/cli"
 	"k8s.io/api/core/v1"
 	extbeta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,6 +17,8 @@ import (
 	k8scache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -52,6 +55,44 @@ var (
 	err             error
 	watchNamespaces string
 )
+
+func RunK8sControllers(ctx *cli.Context, envoyCluster EnvoyCluster) {
+	k8sClusters = []*k8sCluster{
+		{
+			name: "tgt-ttc-bigoli-test",
+			zone: TTC,
+		},
+		{
+			name: "tgt-tte-bigoli-test",
+			zone: TTE,
+		},
+	}
+	setClusterPriority(ctx.String("zone"))
+	for _, k8sCluster := range k8sClusters {
+		err = k8sCluster.startK8sControllers(ctx.String("kube-config"))
+		if err != nil {
+			log.Fatal("Fatal Error occurred: " + err.Error())
+		}
+	}
+	//Create the first snapshot once the cache store is updated
+	envoyCluster.createEnvoySnapshot()
+
+	//Add the events to k8s controllers to start watching the events
+	for _, k8sCluster := range k8sClusters {
+		k8sCluster.addK8sEventHandlers()
+	}
+
+}
+
+func setClusterPriority(envoyZone string) {
+	for _, k8sCluster := range k8sClusters {
+		if strings.ToLower(strconv.Itoa(int(k8sCluster.zone))) == strings.ToLower(envoyZone) {
+			k8sCluster.priority = 0
+		} else {
+			k8sCluster.priority = 1
+		}
+	}
+}
 
 func (c *k8sCluster) startK8sControllers(kubeConfigPath string) error {
 	c.clientSet, err = newKubeClient(kubeConfigPath, c.name)

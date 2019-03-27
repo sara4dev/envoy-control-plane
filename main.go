@@ -3,9 +3,6 @@ package main
 import (
 	"github.com/urfave/cli"
 	"os"
-	"strconv"
-	"strings"
-
 	"runtime"
 
 	envoycache "github.com/envoyproxy/go-control-plane/pkg/cache"
@@ -43,47 +40,17 @@ func main() {
 	}
 }
 
-func setClusterPriority(envoyZone string) {
-	for _, k8sCluster := range k8sClusters {
-		if strings.ToLower(strconv.Itoa(int(k8sCluster.zone))) == strings.ToLower(envoyZone) {
-			k8sCluster.priority = 0
-		} else {
-			k8sCluster.priority = 1
-		}
-	}
-}
-
 func run(ctx *cli.Context) error {
 	runtime.GOMAXPROCS(2)
 	//resyncPeriod = time.Minute * 1
-	k8sClusters = []*k8sCluster{
-		{
-			name: "tgt-ttc-bigoli-test",
-			zone: TTC,
-		},
-		{
-			name: "tgt-tte-bigoli-test",
-			zone: TTE,
-		},
-	}
-	setClusterPriority(ctx.String("zone"))
-	for _, k8sCluster := range k8sClusters {
-		err = k8sCluster.startK8sControllers(ctx.String("kube-config"))
-		if err != nil {
-			log.Fatal("Fatal Error occurred: " + err.Error())
-		}
-	}
 	signal := make(chan struct{})
 	cb := &callbacks{signal: signal}
 	envoyCluster = EnvoyCluster{}
 	envoyCluster.envoySnapshotCache = envoycache.NewSnapshotCache(false, Hasher{}, logger{})
+
+	RunK8sControllers(ctx, envoyCluster)
+
 	srv := server.NewServer(envoyCluster.envoySnapshotCache, cb)
-	//create the first envoy snapshot
-	envoyCluster.createEnvoySnapshot()
-	//start the events to k8s controllers to start watching the events
-	for _, k8sCluster := range k8sClusters {
-		k8sCluster.addK8sEventHandlers()
-	}
 	RunManagementServer(context.Background(), srv, 8080)
 	return nil
 }
