@@ -6,7 +6,6 @@ import (
 	"runtime"
 
 	envoycache "github.com/envoyproxy/go-control-plane/pkg/cache"
-	"github.com/envoyproxy/go-control-plane/pkg/server"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
@@ -43,14 +42,11 @@ func main() {
 func run(ctx *cli.Context) error {
 	runtime.GOMAXPROCS(2)
 	//resyncPeriod = time.Minute * 1
-	signal := make(chan struct{})
-	cb := &callbacks{signal: signal}
 	envoyCluster = EnvoyCluster{}
 	envoyCluster.envoySnapshotCache = envoycache.NewSnapshotCache(false, Hasher{}, logger{})
 
 	RunK8sControllers(ctx, envoyCluster)
 
-	srv := server.NewServer(envoyCluster.envoySnapshotCache, cb)
-	RunManagementServer(context.Background(), srv, 8080)
+	envoyCluster.RunManagementServer(context.Background(), 8080)
 	return nil
 }

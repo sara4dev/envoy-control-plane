@@ -105,12 +105,15 @@ func (cb *callbacks) OnFetchRequest(_ context.Context, req *v2.DiscoveryRequest)
 }
 func (cb *callbacks) OnFetchResponse(*v2.DiscoveryRequest, *v2.DiscoveryResponse) {}
 
-func RunManagementServer(ctx context.Context, server server.Server, port uint) {
+func (e *EnvoyCluster) RunManagementServer(ctx context.Context, port uint) {
 	// gRPC golang library sets a very small upper bound for the number gRPC/h2
 	// streams over a single TCP connection. If a proxy multiplexes requests over
 	// a single connection to the management server, then it might lead to
 	// availability problems.
 	var grpcOptions []grpc.ServerOption
+	signal := make(chan struct{})
+	cb := &callbacks{signal: signal}
+	server := server.NewServer(e.envoySnapshotCache, cb)
 	grpcOptions = append(grpcOptions, grpc.MaxConcurrentStreams(grpcMaxConcurrentStreams))
 	grpcServer := grpc.NewServer(grpcOptions...)
 
