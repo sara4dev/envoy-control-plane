@@ -178,23 +178,23 @@ func (c *k8sCluster) updatedObj(oldObj interface{}, newObj interface{}) {
 	var objNamespace string
 	var objName string
 
-	switch newObj := oldObj.(type) {
+	switch updatedObj := oldObj.(type) {
 	case *extbeta1.Ingress:
-		objNamespace = newObj.Namespace
-		objName = newObj.Name
+		objNamespace = updatedObj.Namespace
+		objName = updatedObj.Name
 	case *v1.Service:
-		objNamespace = newObj.Namespace
-		objName = newObj.Name
+		objNamespace = updatedObj.Namespace
+		objName = updatedObj.Name
 	case *v1.Secret:
-		objNamespace = newObj.Namespace
-		objName = newObj.Name
-		if newObj.Data["tls.crt"] == nil || newObj.Data["tls.key"] == nil {
+		objNamespace = updatedObj.Namespace
+		objName = updatedObj.Name
+		if updatedObj.Data["tls.crt"] == nil || updatedObj.Data["tls.key"] == nil {
 			log.Infof("skipping envoy updates, as it's not a TLS secret --> %v:%v:%v", c.name, objNamespace, objName)
 			return
 		}
 	case *v1.Node:
-		objNamespace = newObj.Namespace
-		objName = newObj.Name
+		objNamespace = updatedObj.Namespace
+		objName = updatedObj.Name
 	}
 
 	if cmp.Equal(oldObj, newObj,
@@ -212,26 +212,26 @@ func (c *k8sCluster) deletedObj(obj interface{}) {
 	var objName string
 	var initialObjects *[]string
 
-	switch newObj := obj.(type) {
+	switch delObj := obj.(type) {
 	case *extbeta1.Ingress:
-		objNamespace = newObj.Namespace
-		objName = newObj.Name
+		objNamespace = delObj.Namespace
+		objName = delObj.Name
 		initialObjects = &c.initialIngresses
 	case *v1.Service:
-		objNamespace = newObj.Namespace
-		objName = newObj.Name
+		objNamespace = delObj.Namespace
+		objName = delObj.Name
 		initialObjects = &c.initialServices
 	case *v1.Secret:
-		objNamespace = newObj.Namespace
-		objName = newObj.Name
+		objNamespace = delObj.Namespace
+		objName = delObj.Name
 		initialObjects = &c.initialSecrets
-		if newObj.Data["tls.crt"] == nil || newObj.Data["tls.key"] == nil {
+		if delObj.Data["tls.crt"] == nil || delObj.Data["tls.key"] == nil {
 			log.Infof("skipping envoy updates, as it's not a TLS secret --> %v:%v:%v", c.name, objNamespace, objName)
 			return
 		}
 	case *v1.Node:
-		objNamespace = newObj.Namespace
-		objName = newObj.Name
+		objNamespace = delObj.Namespace
+		objName = delObj.Name
 		initialObjects = &c.initialNodes
 	}
 
