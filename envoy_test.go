@@ -23,12 +23,17 @@ type k8sTestData struct {
 }
 
 var k8sTestDataMap map[string]k8sTestData
+var testK8sClusters []*k8sCluster
+var testEnvoyCluster EnvoyCluster
 
 // Test Data Setup
 
 func setupEnvoyTest() {
 
-	k8sClusters = []*k8sCluster{
+	testEnvoyCluster = EnvoyCluster{}
+	testEnvoyCluster.k8sCacheStoreMap = make(map[string]*K8sCacheStore)
+
+	testK8sClusters = []*k8sCluster{
 		{
 			name: "cluster1",
 			zone: TTC,
@@ -41,32 +46,33 @@ func setupEnvoyTest() {
 
 	k8sTestDataMap = make(map[string]k8sTestData)
 
-	for _, k8sCluster := range k8sClusters {
+	for _, k8sCluster := range testK8sClusters {
 		k8sCluster.loadTestData()
-		k8sCluster.ingressCacheStore = &k8scache.FakeCustomStore{
+		testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name] = &K8sCacheStore{}
+		testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].IngressCacheStore = &k8scache.FakeCustomStore{
 			ListKeysFunc: k8sCluster.fakeIngressKeys,
 			ListFunc:     k8sCluster.fakeIngresses,
 			GetByKeyFunc: k8sCluster.fakeIngressByKey,
 		}
-		k8sCluster.initialIngresses = k8sCluster.ingressCacheStore.ListKeys()
-		k8sCluster.serviceCacheStore = &k8scache.FakeCustomStore{
+		k8sCluster.initialIngresses = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].IngressCacheStore.ListKeys()
+		testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].ServiceCacheStore = &k8scache.FakeCustomStore{
 			ListKeysFunc: k8sCluster.fakeServiceKeys,
 			ListFunc:     k8sCluster.fakeServices,
 			GetByKeyFunc: k8sCluster.fakeServiceByKey,
 		}
-		k8sCluster.initialServices = k8sCluster.serviceCacheStore.ListKeys()
-		k8sCluster.secretCacheStore = &k8scache.FakeCustomStore{
+		k8sCluster.initialServices = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].ServiceCacheStore.ListKeys()
+		testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].SecretCacheStore = &k8scache.FakeCustomStore{
 			ListKeysFunc: k8sCluster.fakeSecretKeys,
 			ListFunc:     k8sCluster.fakeSecrets,
 			GetByKeyFunc: k8sCluster.fakeSecretByKey,
 		}
-		k8sCluster.initialSecrets = k8sCluster.secretCacheStore.ListKeys()
-		k8sCluster.nodeCacheStore = &k8scache.FakeCustomStore{
+		k8sCluster.initialSecrets = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].SecretCacheStore.ListKeys()
+		testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].NodeCacheStore = &k8scache.FakeCustomStore{
 			ListKeysFunc: k8sCluster.fakeNodeKeys,
 			ListFunc:     k8sCluster.fakeNodes,
 			GetByKeyFunc: k8sCluster.fakeNodeByKey,
 		}
-		k8sCluster.initialNodes = k8sCluster.nodeCacheStore.ListKeys()
+		k8sCluster.initialNodes = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].NodeCacheStore.ListKeys()
 	}
 }
 
@@ -209,7 +215,7 @@ func (c *k8sCluster) fakeNodeKeys() []string {
 func TestMakeEnvoyClusters(t *testing.T) {
 	setupEnvoyTest()
 	envoyClustersChan := make(chan []envoycache.Resource)
-	go makeEnvoyClusters(envoyClustersChan)
+	go testEnvoyCluster.makeEnvoyClusters(envoyClustersChan)
 	envoyClusters := <-envoyClustersChan
 	if len(envoyClusters) != 15 {
 		t.Error("Unexpected number of Envoy Clusters")
@@ -219,7 +225,7 @@ func TestMakeEnvoyClusters(t *testing.T) {
 func TestMakeEnvoyEndpoints_namespace1_http_cluster1_ingress1_service1_80(t *testing.T) {
 	//setupEnvoyTest()
 	envoyEndpointsChan := make(chan []envoycache.Resource)
-	go makeEnvoyEndpoints(envoyEndpointsChan)
+	go testEnvoyCluster.makeEnvoyEndpoints(envoyEndpointsChan)
 	envoyEndpoints := <-envoyEndpointsChan
 
 	// endpoint object for every cluster, even for empty cluster
@@ -253,7 +259,7 @@ func TestMakeEnvoyEndpoints_namespace1_http_cluster1_ingress1_service1_80(t *tes
 
 func TestMakeEnvoyEndpoints_namespace1_http_cluster2_ingress1_service1_80(t *testing.T) {
 	envoyEndpointsChan := make(chan []envoycache.Resource)
-	go makeEnvoyEndpoints(envoyEndpointsChan)
+	go testEnvoyCluster.makeEnvoyEndpoints(envoyEndpointsChan)
 	envoyEndpoints := <-envoyEndpointsChan
 
 	matchedTestCluster := false
@@ -279,7 +285,7 @@ func TestMakeEnvoyEndpoints_namespace1_http_cluster2_ingress1_service1_80(t *tes
 
 func TestMakeEnvoyEndpoints_namespace2_http_cross_cluster_ingress_service2_80(t *testing.T) {
 	envoyEndpointsChan := make(chan []envoycache.Resource)
-	go makeEnvoyEndpoints(envoyEndpointsChan)
+	go testEnvoyCluster.makeEnvoyEndpoints(envoyEndpointsChan)
 	envoyEndpoints := <-envoyEndpointsChan
 
 	matchedTestCluster := false
@@ -311,7 +317,7 @@ func TestMakeEnvoyEndpoints_namespace2_http_cross_cluster_ingress_service2_80(t 
 
 func TestMakeEnvoyEndpoints_namespace6_http_clusterip_service_ingress_service6_80(t *testing.T) {
 	envoyEndpointsChan := make(chan []envoycache.Resource)
-	go makeEnvoyEndpoints(envoyEndpointsChan)
+	go testEnvoyCluster.makeEnvoyEndpoints(envoyEndpointsChan)
 	envoyEndpoints := <-envoyEndpointsChan
 
 	matchedTestCluster := false
@@ -336,7 +342,7 @@ func TestMakeEnvoyEndpoints_namespace6_http_clusterip_service_ingress_service6_8
 func TestMakeEnvoyListeners(t *testing.T) {
 	//setupEnvoyTest()
 	envoyListenersChan := make(chan []envoycache.Resource)
-	go makeEnvoyListeners(envoyListenersChan)
+	go testEnvoyCluster.makeEnvoyListeners(envoyListenersChan)
 	envoyListeners := <-envoyListenersChan
 	if len(envoyListeners) != 2 {
 		t.Error("Unexpected number of Envoy Listeners")
@@ -345,7 +351,7 @@ func TestMakeEnvoyListeners(t *testing.T) {
 
 func TestMakeEnvoyListeners_http(t *testing.T) {
 	envoyListenersChan := make(chan []envoycache.Resource)
-	go makeEnvoyListeners(envoyListenersChan)
+	go testEnvoyCluster.makeEnvoyListeners(envoyListenersChan)
 	envoyListeners := <-envoyListenersChan
 	matchedTestListener := false
 	for _, envoyListenerObj := range envoyListeners {
@@ -374,7 +380,7 @@ func TestMakeEnvoyListeners_http(t *testing.T) {
 
 func TestMakeEnvoyListeners_https(t *testing.T) {
 	envoyListenersChan := make(chan []envoycache.Resource)
-	go makeEnvoyListeners(envoyListenersChan)
+	go testEnvoyCluster.makeEnvoyListeners(envoyListenersChan)
 	envoyListeners := <-envoyListenersChan
 	matchedTestListener := false
 	for _, envoyListenerObj := range envoyListeners {
@@ -394,7 +400,7 @@ func TestMakeEnvoyListeners_https(t *testing.T) {
 
 func TestMakeEnvoyListeners_https_invalid_tls_ingress(t *testing.T) {
 	envoyListenersChan := make(chan []envoycache.Resource)
-	go makeEnvoyListeners(envoyListenersChan)
+	go testEnvoyCluster.makeEnvoyListeners(envoyListenersChan)
 	envoyListeners := <-envoyListenersChan
 	matchedTestListener := false
 	for _, envoyListenerObj := range envoyListeners {
@@ -427,7 +433,7 @@ func TestMakeEnvoyListeners_https_invalid_tls_ingress(t *testing.T) {
 
 func TestMakeEnvoyListeners_https_default_tls_ingress(t *testing.T) {
 	envoyListenersChan := make(chan []envoycache.Resource)
-	go makeEnvoyListeners(envoyListenersChan)
+	go testEnvoyCluster.makeEnvoyListeners(envoyListenersChan)
 	envoyListeners := <-envoyListenersChan
 	matchedTestListener := false
 	for _, envoyListenerObj := range envoyListeners {
@@ -460,7 +466,7 @@ func TestMakeEnvoyListeners_https_default_tls_ingress(t *testing.T) {
 
 func TestMakeEnvoyListeners_https_valid_tls_ingress(t *testing.T) {
 	envoyListenersChan := make(chan []envoycache.Resource)
-	go makeEnvoyListeners(envoyListenersChan)
+	go testEnvoyCluster.makeEnvoyListeners(envoyListenersChan)
 	envoyListeners := <-envoyListenersChan
 	matchedTestListener := false
 	for _, envoyListenerObj := range envoyListeners {
