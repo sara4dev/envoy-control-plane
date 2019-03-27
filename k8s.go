@@ -31,33 +31,34 @@ const (
 )
 
 type k8sCluster struct {
-	name              string
-	zone              zone
-	priority          uint32
-	clientSet         kubernetes.Interface
-	ingressInformer   k8scache.SharedInformer
-	ingressCacheStore k8scache.Store
-	initialIngresses  []string
-	serviceInformer   k8scache.SharedInformer
-	serviceCacheStore k8scache.Store
-	initialServices   []string
-	secretInformer    k8scache.SharedInformer
-	secretCacheStore  k8scache.Store
-	initialSecrets    []string
-	nodeInformer      k8scache.SharedInformer
-	nodeCacheStore    k8scache.Store
-	initialNodes      []string
+	name            string
+	zone            zone
+	priority        uint32
+	clientSet       kubernetes.Interface
+	ingressInformer k8scache.SharedInformer
+	//ingressCacheStore k8scache.Store
+	initialIngresses []string
+	serviceInformer  k8scache.SharedInformer
+	//serviceCacheStore k8scache.Store
+	initialServices []string
+	secretInformer  k8scache.SharedInformer
+	//secretCacheStore  k8scache.Store
+	initialSecrets []string
+	nodeInformer   k8scache.SharedInformer
+	//nodeCacheStore    k8scache.Store
+	initialNodes []string
 }
 
 var (
-	k8sClusters     []*k8sCluster
+	//k8sClusters     	[]*k8sCluster
 	resyncPeriod    time.Duration
 	err             error
 	watchNamespaces string
 )
 
 func RunK8sControllers(ctx *cli.Context, envoyCluster EnvoyCluster) {
-	k8sClusters = []*k8sCluster{
+	envoyCluster.k8sCacheStoreMap = make(map[string]*K8sCacheStore)
+	k8sClusters := []*k8sCluster{
 		{
 			name: "tgt-ttc-bigoli-test",
 			zone: TTC,
@@ -67,9 +68,16 @@ func RunK8sControllers(ctx *cli.Context, envoyCluster EnvoyCluster) {
 			zone: TTE,
 		},
 	}
-	setClusterPriority(ctx.String("zone"))
+
 	for _, k8sCluster := range k8sClusters {
-		err = k8sCluster.startK8sControllers(ctx.String("kube-config"))
+		k8sCluster.setClusterPriority(ctx.String("zone"))
+		k8sCacheStore := K8sCacheStore{
+			Name:     k8sCluster.name,
+			Zone:     k8sCluster.zone,
+			Priority: k8sCluster.priority,
+		}
+		envoyCluster.k8sCacheStoreMap[k8sCluster.name] = &k8sCacheStore
+		err = k8sCluster.startK8sControllers(ctx.String("kube-config"), envoyCluster)
 		if err != nil {
 			log.Fatal("Fatal Error occurred: " + err.Error())
 		}
@@ -84,27 +92,26 @@ func RunK8sControllers(ctx *cli.Context, envoyCluster EnvoyCluster) {
 
 }
 
-func setClusterPriority(envoyZone string) {
-	for _, k8sCluster := range k8sClusters {
-		if strings.ToLower(strconv.Itoa(int(k8sCluster.zone))) == strings.ToLower(envoyZone) {
-			k8sCluster.priority = 0
-		} else {
-			k8sCluster.priority = 1
-		}
+func (c *k8sCluster) setClusterPriority(envoyZone string) {
+	if strings.ToLower(strconv.Itoa(int(c.zone))) == strings.ToLower(envoyZone) {
+		c.priority = 0
+	} else {
+		c.priority = 1
 	}
+
 }
 
-func (c *k8sCluster) startK8sControllers(kubeConfigPath string) error {
+func (c *k8sCluster) startK8sControllers(kubeConfigPath string, envoyCluster EnvoyCluster) error {
 	c.clientSet, err = newKubeClient(kubeConfigPath, c.name)
 	if err != nil {
 		return err
 	}
 	watchNamespaces = v1.NamespaceAll
 	//watchNamespaces = "kube-system"
-	c.watchObjects(resyncPeriod, &extbeta1.Ingress{})
-	c.watchObjects(resyncPeriod, &v1.Service{})
-	c.watchObjects(resyncPeriod, &v1.Secret{})
-	c.watchObjects(resyncPeriod, &v1.Node{})
+	c.watchObjects(resyncPeriod, &extbeta1.Ingress{}, envoyCluster)
+	c.watchObjects(resyncPeriod, &v1.Service{}, envoyCluster)
+	c.watchObjects(resyncPeriod, &v1.Secret{}, envoyCluster)
+	c.watchObjects(resyncPeriod, &v1.Node{}, envoyCluster)
 	return nil
 }
 
@@ -133,7 +140,7 @@ func (c *k8sCluster) addK8sEventHandlers() {
 	})
 }
 
-func (c *k8sCluster) watchObjects(resyncPeriod time.Duration, objType runtime.Object) {
+func (c *k8sCluster) watchObjects(resyncPeriod time.Duration, objType runtime.Object, envoyCluster EnvoyCluster) {
 	var lw *k8scache.ListWatch
 	var informer *k8scache.SharedInformer
 	var cacheStore *k8scache.Store
@@ -142,22 +149,22 @@ func (c *k8sCluster) watchObjects(resyncPeriod time.Duration, objType runtime.Ob
 	case *extbeta1.Ingress:
 		lw = k8scache.NewListWatchFromClient(c.clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", watchNamespaces, fields.Everything())
 		informer = &c.ingressInformer
-		cacheStore = &c.ingressCacheStore
+		cacheStore = &envoyCluster.k8sCacheStoreMap[c.name].IngressCacheStore
 		initialObjects = &c.initialIngresses
 	case *v1.Service:
 		lw = k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "services", watchNamespaces, fields.Everything())
 		informer = &c.serviceInformer
-		cacheStore = &c.serviceCacheStore
+		cacheStore = &envoyCluster.k8sCacheStoreMap[c.name].ServiceCacheStore
 		initialObjects = &c.initialServices
 	case *v1.Secret:
 		lw = k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "secrets", watchNamespaces, fields.Everything())
 		informer = &c.secretInformer
-		cacheStore = &c.secretCacheStore
+		cacheStore = &envoyCluster.k8sCacheStoreMap[c.name].SecretCacheStore
 		initialObjects = &c.initialSecrets
 	case *v1.Node:
 		lw = k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
 		informer = &c.nodeInformer
-		cacheStore = &c.nodeCacheStore
+		cacheStore = &envoyCluster.k8sCacheStoreMap[c.name].NodeCacheStore
 		initialObjects = &c.initialNodes
 	}
 

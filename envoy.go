@@ -33,6 +33,7 @@ type EnvoyCluster struct {
 	envoySnapshotCache envoycache.SnapshotCache
 	version            int32
 	tlsDataCache       sync.Map
+	k8sCacheStoreMap   map[string]*K8sCacheStore
 }
 
 type k8sService struct {
@@ -141,7 +142,7 @@ func (e *EnvoyCluster) RunManagementServer(ctx context.Context, port uint) {
 	grpcServer.GracefulStop()
 }
 
-func (envoyCluster *EnvoyCluster) createEnvoySnapshot() {
+func (e *EnvoyCluster) createEnvoySnapshot() {
 	atomic.AddInt32(&envoyCluster.version, 1)
 	//nodeId := envoySnapshotCache.GetStatusKeys()[0]
 	log.Infof(">>>>>>>>>>>>>>>>>>> creating snapshot Version " + fmt.Sprint(envoyCluster.version))
@@ -150,9 +151,9 @@ func (envoyCluster *EnvoyCluster) createEnvoySnapshot() {
 	envoyClustersChan := make(chan []envoycache.Resource)
 	envoyEndpointsChan := make(chan []envoycache.Resource)
 
-	go makeEnvoyListeners(envoyListenersChan)
-	go makeEnvoyClusters(envoyClustersChan)
-	go makeEnvoyEndpoints(envoyEndpointsChan)
+	go e.makeEnvoyListeners(envoyListenersChan)
+	go e.makeEnvoyClusters(envoyClustersChan)
+	go e.makeEnvoyEndpoints(envoyEndpointsChan)
 
 	envoyListeners := <-envoyListenersChan
 	envoyEndpoints := <-envoyEndpointsChan
@@ -163,7 +164,7 @@ func (envoyCluster *EnvoyCluster) createEnvoySnapshot() {
 	envoyCluster.envoySnapshotCache.SetSnapshot("k8s_ingress", snap)
 }
 
-func makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
+func (e *EnvoyCluster) makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
 	envoyClusters := []envoycache.Resource{}
 
 	grpcServices := []*core.GrpcService{}
@@ -179,8 +180,8 @@ func makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
 	clusterMap := make(map[string]string)
 	// Create Envoy Clusters per K8s Service referenced in ingress
 
-	for _, k8sCluster := range k8sClusters {
-		for _, obj := range k8sCluster.ingressCacheStore.List() {
+	for _, k8sCluster := range e.k8sCacheStoreMap {
+		for _, obj := range k8sCluster.IngressCacheStore.List() {
 			ingress := obj.(*extbeta1.Ingress)
 			for _, ingressRule := range ingress.Spec.Rules {
 				for _, httpPath := range ingressRule.HTTP.Paths {
@@ -216,15 +217,15 @@ func makeEnvoyClusters(envoyClustersChan chan []envoycache.Resource) {
 	envoyClustersChan <- envoyClusters
 }
 
-func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
+func (e *EnvoyCluster) makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 	envoyEndpoints := []envoycache.Resource{}
 	localityLbEndpointsMap := make(map[string][]endpoint.LocalityLbEndpoints)
 
 	clusterMap := make(map[string]k8sService)
 	// Create Envoy Clusters per K8s Service referenced in ingress
 
-	for _, k8sCluster := range k8sClusters {
-		for _, obj := range k8sCluster.ingressCacheStore.List() {
+	for _, k8sCluster := range e.k8sCacheStoreMap {
+		for _, obj := range k8sCluster.IngressCacheStore.List() {
 			ingress := obj.(*extbeta1.Ingress)
 			for _, ingressRule := range ingress.Spec.Rules {
 				for _, httpPath := range ingressRule.HTTP.Paths {
@@ -242,15 +243,15 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 		}
 	}
 
-	for _, k8sCluster := range k8sClusters {
+	for _, k8sCluster := range e.k8sCacheStoreMap {
 		for clusterName, k8sService := range clusterMap {
 			lbEndpoints := []endpoint.LbEndpoint{}
 			localityLbEndpoint := endpoint.LocalityLbEndpoints{}
-			serviceObj, serviceExists, err := k8sCluster.serviceCacheStore.GetByKey(k8sService.namespace + "/" + k8sService.name)
+			serviceObj, serviceExists, err := k8sCluster.ServiceCacheStore.GetByKey(k8sService.namespace + "/" + k8sService.name)
 			if err != nil {
 				log.Fatal("Error in getting service by name")
 			}
-			_, ingressExists, err := k8sCluster.ingressCacheStore.GetByKey(k8sService.namespace + "/" + k8sService.ingressName)
+			_, ingressExists, err := k8sCluster.IngressCacheStore.GetByKey(k8sService.namespace + "/" + k8sService.ingressName)
 			if err != nil {
 				log.Fatal("Error in getting ingress by name")
 			}
@@ -258,7 +259,7 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 				service := serviceObj.(*v1.Service)
 				if service.Spec.Type == v1.ServiceTypeNodePort {
 					for _, servicePort := range service.Spec.Ports {
-						for _, nodeObj := range k8sCluster.nodeCacheStore.List() {
+						for _, nodeObj := range k8sCluster.NodeCacheStore.List() {
 							node := nodeObj.(*v1.Node)
 							lbEndpoint := endpoint.LbEndpoint{
 								HostIdentifier: &endpoint.LbEndpoint_Endpoint{
@@ -285,9 +286,9 @@ func makeEnvoyEndpoints(envoyEndpointsChan chan []envoycache.Resource) {
 
 				localityLbEndpoint = endpoint.LocalityLbEndpoints{
 					Locality: &core.Locality{
-						Zone: strconv.Itoa(int(k8sCluster.zone)),
+						Zone: strconv.Itoa(int(k8sCluster.Zone)),
 					},
-					Priority:    k8sCluster.priority,
+					Priority:    k8sCluster.Priority,
 					LbEndpoints: lbEndpoints,
 				}
 				localityLbEndpointsMap[clusterName] = append(localityLbEndpointsMap[clusterName], localityLbEndpoint)
@@ -314,7 +315,7 @@ func getClusterName(k8sNamespace string, k8singressHost string, k8sServiceName s
 	//return k8sNamespace + ":" + k8sServiceName + ":" + fmt.Sprint(k8sServicePort)
 }
 
-func getTLS(k8sCluster *k8sCluster, namespace string, tlsSecretName string) *auth.DownstreamTlsContext {
+func getTLS(k8sCluster *K8sCacheStore, namespace string, tlsSecretName string) *auth.DownstreamTlsContext {
 	tls := &auth.DownstreamTlsContext{}
 	tls.CommonTlsContext = &auth.CommonTlsContext{
 		TlsCertificates: []*auth.TlsCertificate{},
@@ -330,14 +331,14 @@ func getTLS(k8sCluster *k8sCluster, namespace string, tlsSecretName string) *aut
 	return tls
 }
 
-func getTLSData(k8sCluster *k8sCluster, namespace string, tlsSecretName string) *auth.TlsCertificate {
-	key := k8sCluster.name + "--" + namespace + "--" + tlsSecretName
+func getTLSData(k8sCluster *K8sCacheStore, namespace string, tlsSecretName string) *auth.TlsCertificate {
+	key := k8sCluster.Name + "--" + namespace + "--" + tlsSecretName
 	tlsCertificate := auth.TlsCertificate{}
 	value, ok := envoyCluster.tlsDataCache.Load(key)
 	if ok {
 		tlsCertificate = value.(auth.TlsCertificate)
 	} else {
-		defaultTLS, exists, err := k8sCluster.secretCacheStore.GetByKey(namespace + "/" + tlsSecretName)
+		defaultTLS, exists, err := k8sCluster.SecretCacheStore.GetByKey(namespace + "/" + tlsSecretName)
 		if err != nil {
 			log.Warn("Error in finding TLS secrets:" + namespace + "-" + tlsSecretName + ", using the default certs")
 			//TODO remove hard coding of default TLS
@@ -375,15 +376,15 @@ func getTLSData(k8sCluster *k8sCluster, namespace string, tlsSecretName string) 
 	return &tlsCertificate
 }
 
-func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
+func (e *EnvoyCluster) makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 	start := time.Now()
 	envoyListeners := []envoycache.Resource{}
 
 	envoyHttpsListenersChan := make(chan []envoycache.Resource)
 	envoyHttpListenersChan := make(chan []envoycache.Resource)
 
-	go makeEnvoyHttpsListerners(envoyHttpsListenersChan)
-	go makeEnvoyHttpListerners(envoyHttpListenersChan)
+	go e.makeEnvoyHttpsListerners(envoyHttpsListenersChan)
+	go e.makeEnvoyHttpListerners(envoyHttpListenersChan)
 
 	envoyHttpsListeners := <-envoyHttpsListenersChan
 	envoyListeners = append(envoyListeners, envoyHttpsListeners...)
@@ -397,12 +398,12 @@ func makeEnvoyListeners(envoyListenersChan chan []envoycache.Resource) {
 	log.Printf("makeEnvoyListeners took %s", elapsed)
 }
 
-func makeEnvoyHttpListerners(envoyHttpListenersChan chan []envoycache.Resource) {
+func (e *EnvoyCluster) makeEnvoyHttpListerners(envoyHttpListenersChan chan []envoycache.Resource) {
 	envoyListeners := []envoycache.Resource{}
 	virtualHosts := []route.VirtualHost{}
 	virtualHostsMap := make(map[string]route.VirtualHost)
-	for _, k8sCluster := range k8sClusters {
-		for _, ingressObj := range k8sCluster.ingressCacheStore.List() {
+	for _, k8sCluster := range e.k8sCacheStoreMap {
+		for _, ingressObj := range k8sCluster.IngressCacheStore.List() {
 			ingress := ingressObj.(*extbeta1.Ingress)
 			// add it to HTTP listener only if ingress has no TLS
 			if len(ingress.Spec.TLS) == 0 {
@@ -457,12 +458,12 @@ func makeEnvoyHttpListerners(envoyHttpListenersChan chan []envoycache.Resource) 
 	envoyHttpListenersChan <- envoyListeners
 }
 
-func makeEnvoyHttpsListerners(envoyHttpsListenersChan chan []envoycache.Resource) {
+func (e *EnvoyCluster) makeEnvoyHttpsListerners(envoyHttpsListenersChan chan []envoycache.Resource) {
 	envoyListeners := []envoycache.Resource{}
 	listenerFilerChains := []listener.FilterChain{}
 	listenerFilerChainsMap := make(map[string]listener.FilterChain)
-	for _, k8sCluster := range k8sClusters {
-		for _, ingressObj := range k8sCluster.ingressCacheStore.List() {
+	for _, k8sCluster := range e.k8sCacheStoreMap {
+		for _, ingressObj := range k8sCluster.IngressCacheStore.List() {
 			ingress := ingressObj.(*extbeta1.Ingress)
 			// add it to HTTPS listener only if ingress has TLS
 			if len(ingress.Spec.TLS) > 0 {
@@ -579,8 +580,8 @@ func makeConnectionManager(virtualHosts []route.VirtualHost) *hcm.HttpConnection
 	}
 }
 
-func findService(k8sCluster *k8sCluster, namespace string, serviceName string) *v1.Service {
-	for _, serviceObj := range k8sCluster.serviceCacheStore.List() {
+func findService(k8sCluster *K8sCacheStore, namespace string, serviceName string) *v1.Service {
+	for _, serviceObj := range k8sCluster.ServiceCacheStore.List() {
 		service := serviceObj.(*v1.Service)
 		if service.Namespace == namespace && service.Name == serviceName {
 			return service
@@ -589,7 +590,7 @@ func findService(k8sCluster *k8sCluster, namespace string, serviceName string) *
 	return nil
 }
 
-func makeVirtualHost(k8sCluster *k8sCluster, namespace string, ingressRule extbeta1.IngressRule) route.VirtualHost {
+func makeVirtualHost(k8sCluster *K8sCacheStore, namespace string, ingressRule extbeta1.IngressRule) route.VirtualHost {
 
 	routes := []route.Route{}
 
