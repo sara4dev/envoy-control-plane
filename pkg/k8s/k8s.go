@@ -35,26 +35,21 @@ const (
 )
 
 type k8sCluster struct {
-	name            string
-	zone            zone
-	priority        uint32
-	clientSet       kubernetes.Interface
-	ingressInformer k8scache.SharedInformer
-	//ingressCacheStore k8scache.Store
+	name             string
+	zone             zone
+	priority         uint32
+	clientSet        kubernetes.Interface
+	ingressInformer  k8scache.SharedInformer
 	initialIngresses []string
 	serviceInformer  k8scache.SharedInformer
-	//serviceCacheStore k8scache.Store
-	initialServices []string
-	secretInformer  k8scache.SharedInformer
-	//secretCacheStore  k8scache.Store
-	initialSecrets []string
-	nodeInformer   k8scache.SharedInformer
-	//nodeCacheStore    k8scache.Store
-	initialNodes []string
+	initialServices  []string
+	secretInformer   k8scache.SharedInformer
+	initialSecrets   []string
+	nodeInformer     k8scache.SharedInformer
+	initialNodes     []string
 }
 
 var (
-	//k8sClusters     	[]*k8sCluster
 	resyncPeriod    time.Duration
 	err             error
 	watchNamespaces string
