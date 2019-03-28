@@ -22,8 +22,11 @@ type k8sTestData struct {
 	nodeList    v1.NodeList
 }
 
+type TestK8sCacheStore struct {
+	K8sCacheStore
+}
+
 var k8sTestDataMap map[string]k8sTestData
-var testK8sClusters []*k8sCluster
 var testEnvoyCluster EnvoyCluster
 
 // Test Data Setup
@@ -32,70 +35,69 @@ func setupEnvoyTest() {
 
 	testEnvoyCluster = EnvoyCluster{}
 	testEnvoyCluster.k8sCacheStoreMap = make(map[string]*K8sCacheStore)
+	testEnvoyCluster.k8sCacheStoreMap["cluster1"] = &K8sCacheStore{
+		Name:     "cluster1",
+		Zone:     TTC,
+		Priority: 0,
+	}
 
-	testK8sClusters = []*k8sCluster{
-		{
-			name: "cluster1",
-			zone: TTC,
-		},
-		{
-			name: "cluster2",
-			zone: TTE,
-		},
+	testEnvoyCluster.k8sCacheStoreMap["cluster2"] = &K8sCacheStore{
+		Name:     "cluster2",
+		Zone:     TTE,
+		Priority: 1,
 	}
 
 	k8sTestDataMap = make(map[string]k8sTestData)
 
-	for _, k8sCluster := range testK8sClusters {
-		k8sCluster.loadTestData()
-		testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name] = &K8sCacheStore{}
-		testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].IngressCacheStore = &k8scache.FakeCustomStore{
-			ListKeysFunc: k8sCluster.fakeIngressKeys,
-			ListFunc:     k8sCluster.fakeIngresses,
-			GetByKeyFunc: k8sCluster.fakeIngressByKey,
+	for _, k8sCacheStore := range testEnvoyCluster.k8sCacheStoreMap {
+		loadTestData(k8sCacheStore)
+		k8sCacheStore.IngressCacheStore = &k8scache.FakeCustomStore{
+			ListKeysFunc: k8sCacheStore.fakeIngressKeys,
+			ListFunc:     k8sCacheStore.fakeIngresses,
+			GetByKeyFunc: k8sCacheStore.fakeIngressByKey,
 		}
-		k8sCluster.initialIngresses = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].IngressCacheStore.ListKeys()
-		testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].ServiceCacheStore = &k8scache.FakeCustomStore{
-			ListKeysFunc: k8sCluster.fakeServiceKeys,
-			ListFunc:     k8sCluster.fakeServices,
-			GetByKeyFunc: k8sCluster.fakeServiceByKey,
+		//k8sCluster.initialIngresses = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].IngressCacheStore.ListKeys()
+		k8sCacheStore.ServiceCacheStore = &k8scache.FakeCustomStore{
+			ListKeysFunc: k8sCacheStore.fakeServiceKeys,
+			ListFunc:     k8sCacheStore.fakeServices,
+			GetByKeyFunc: k8sCacheStore.fakeServiceByKey,
 		}
-		k8sCluster.initialServices = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].ServiceCacheStore.ListKeys()
-		testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].SecretCacheStore = &k8scache.FakeCustomStore{
-			ListKeysFunc: k8sCluster.fakeSecretKeys,
-			ListFunc:     k8sCluster.fakeSecrets,
-			GetByKeyFunc: k8sCluster.fakeSecretByKey,
+		//k8sCluster.initialServices = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].ServiceCacheStore.ListKeys()
+		k8sCacheStore.SecretCacheStore = &k8scache.FakeCustomStore{
+			ListKeysFunc: k8sCacheStore.fakeSecretKeys,
+			ListFunc:     k8sCacheStore.fakeSecrets,
+			GetByKeyFunc: k8sCacheStore.fakeSecretByKey,
 		}
-		k8sCluster.initialSecrets = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].SecretCacheStore.ListKeys()
-		testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].NodeCacheStore = &k8scache.FakeCustomStore{
-			ListKeysFunc: k8sCluster.fakeNodeKeys,
-			ListFunc:     k8sCluster.fakeNodes,
-			GetByKeyFunc: k8sCluster.fakeNodeByKey,
+		//k8sCluster.initialSecrets = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].SecretCacheStore.ListKeys()
+		k8sCacheStore.NodeCacheStore = &k8scache.FakeCustomStore{
+			ListKeysFunc: k8sCacheStore.fakeNodeKeys,
+			ListFunc:     k8sCacheStore.fakeNodes,
+			GetByKeyFunc: k8sCacheStore.fakeNodeByKey,
 		}
-		k8sCluster.initialNodes = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].NodeCacheStore.ListKeys()
+		//k8sCluster.initialNodes = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].NodeCacheStore.ListKeys()
 	}
 }
 
-func (c *k8sCluster) loadTestData() {
+func loadTestData(k8sCacheStore *K8sCacheStore) {
 	k8sTestData := k8sTestData{}
 
 	//load fake ingresses
-	loadObjFromFile("test-data/"+c.name+"-ingressList.yml", &k8sTestData.ingressList)
+	loadObjFromFile("test-data/"+k8sCacheStore.Name+"-ingressList.yml", &k8sTestData.ingressList)
 
 	//load fake services
-	loadObjFromFile("test-data/"+c.name+"-serviceList.yml", &k8sTestData.serviceList)
+	loadObjFromFile("test-data/"+k8sCacheStore.Name+"-serviceList.yml", &k8sTestData.serviceList)
 
 	//load fake secrets
-	loadObjFromFile("test-data/"+c.name+"-secretList.yml", &k8sTestData.secretList)
+	loadObjFromFile("test-data/"+k8sCacheStore.Name+"-secretList.yml", &k8sTestData.secretList)
 
 	//load fake nodes
-	loadObjFromFile("test-data/"+c.name+"-nodeList.yml", &k8sTestData.nodeList)
+	loadObjFromFile("test-data/"+k8sCacheStore.Name+"-nodeList.yml", &k8sTestData.nodeList)
 
-	k8sTestDataMap[c.name] = k8sTestData
+	k8sTestDataMap[k8sCacheStore.Name] = k8sTestData
 }
 
-func (c *k8sCluster) fakeIngresses() []interface{} {
-	fakeIngresses := k8sTestDataMap[c.name].ingressList.Items
+func (c *K8sCacheStore) fakeIngresses() []interface{} {
+	fakeIngresses := k8sTestDataMap[c.Name].ingressList.Items
 	ingressObjects := make([]interface{}, 0, len(fakeIngresses))
 	for i := 0; i < len(fakeIngresses); i++ {
 		ingressObjects = append(ingressObjects, &fakeIngresses[i])
@@ -103,8 +105,8 @@ func (c *k8sCluster) fakeIngresses() []interface{} {
 	return ingressObjects
 }
 
-func (c *k8sCluster) fakeServices() []interface{} {
-	fakeServices := k8sTestDataMap[c.name].serviceList.Items
+func (c *K8sCacheStore) fakeServices() []interface{} {
+	fakeServices := k8sTestDataMap[c.Name].serviceList.Items
 	serviceObjects := make([]interface{}, 0, len(fakeServices))
 	for i := 0; i < len(fakeServices); i++ {
 		serviceObjects = append(serviceObjects, &fakeServices[i])
@@ -112,8 +114,8 @@ func (c *k8sCluster) fakeServices() []interface{} {
 	return serviceObjects
 }
 
-func (c *k8sCluster) fakeSecrets() []interface{} {
-	fakeSecrets := k8sTestDataMap[c.name].secretList.Items
+func (c *K8sCacheStore) fakeSecrets() []interface{} {
+	fakeSecrets := k8sTestDataMap[c.Name].secretList.Items
 	secretObjects := make([]interface{}, 0, len(fakeSecrets))
 	for i := 0; i < len(fakeSecrets); i++ {
 		secretObjects = append(secretObjects, &fakeSecrets[i])
@@ -121,8 +123,8 @@ func (c *k8sCluster) fakeSecrets() []interface{} {
 	return secretObjects
 }
 
-func (c *k8sCluster) fakeNodes() []interface{} {
-	fakeNodes := k8sTestDataMap[c.name].nodeList.Items
+func (c *K8sCacheStore) fakeNodes() []interface{} {
+	fakeNodes := k8sTestDataMap[c.Name].nodeList.Items
 	nodeObjects := make([]interface{}, 0, len(fakeNodes))
 	for i := 0; i < len(fakeNodes); i++ {
 		nodeObjects = append(nodeObjects, &fakeNodes[i])
@@ -130,8 +132,8 @@ func (c *k8sCluster) fakeNodes() []interface{} {
 	return nodeObjects
 }
 
-func (c *k8sCluster) fakeIngressByKey(key string) (interface{}, bool, error) {
-	for _, ingress := range k8sTestDataMap[c.name].ingressList.Items {
+func (c *K8sCacheStore) fakeIngressByKey(key string) (interface{}, bool, error) {
+	for _, ingress := range k8sTestDataMap[c.Name].ingressList.Items {
 		namespace, name, err := k8scache.SplitMetaNamespaceKey(key)
 		if err != nil {
 			log.Fatal("Error while splittig the metanamespace key")
@@ -143,8 +145,8 @@ func (c *k8sCluster) fakeIngressByKey(key string) (interface{}, bool, error) {
 	return nil, false, nil
 }
 
-func (c *k8sCluster) fakeSecretByKey(key string) (interface{}, bool, error) {
-	for _, secret := range k8sTestDataMap[c.name].secretList.Items {
+func (c *K8sCacheStore) fakeSecretByKey(key string) (interface{}, bool, error) {
+	for _, secret := range k8sTestDataMap[c.Name].secretList.Items {
 		namespace, name, err := k8scache.SplitMetaNamespaceKey(key)
 		if err != nil {
 			log.Fatal("Error while splittig the metanamespace key")
@@ -156,8 +158,8 @@ func (c *k8sCluster) fakeSecretByKey(key string) (interface{}, bool, error) {
 	return nil, false, nil
 }
 
-func (c *k8sCluster) fakeServiceByKey(key string) (interface{}, bool, error) {
-	for _, service := range k8sTestDataMap[c.name].serviceList.Items {
+func (c *K8sCacheStore) fakeServiceByKey(key string) (interface{}, bool, error) {
+	for _, service := range k8sTestDataMap[c.Name].serviceList.Items {
 		namespace, name, err := k8scache.SplitMetaNamespaceKey(key)
 		if err != nil {
 			log.Fatal("Error while splittig the metanamespace key")
@@ -169,8 +171,8 @@ func (c *k8sCluster) fakeServiceByKey(key string) (interface{}, bool, error) {
 	return nil, false, nil
 }
 
-func (c *k8sCluster) fakeNodeByKey(key string) (interface{}, bool, error) {
-	for _, node := range k8sTestDataMap[c.name].nodeList.Items {
+func (c *K8sCacheStore) fakeNodeByKey(key string) (interface{}, bool, error) {
+	for _, node := range k8sTestDataMap[c.Name].nodeList.Items {
 		if node.Name == key {
 			return &node, true, nil
 		}
@@ -178,33 +180,33 @@ func (c *k8sCluster) fakeNodeByKey(key string) (interface{}, bool, error) {
 	return nil, false, nil
 }
 
-func (c *k8sCluster) fakeIngressKeys() []string {
+func (c *K8sCacheStore) fakeIngressKeys() []string {
 	keys := []string{}
-	for _, obj := range k8sTestDataMap[c.name].ingressList.Items {
+	for _, obj := range k8sTestDataMap[c.Name].ingressList.Items {
 		keys = append(keys, obj.Namespace+"/"+obj.Name)
 	}
 	return keys
 }
 
-func (c *k8sCluster) fakeServiceKeys() []string {
+func (c *K8sCacheStore) fakeServiceKeys() []string {
 	keys := []string{}
-	for _, obj := range k8sTestDataMap[c.name].serviceList.Items {
+	for _, obj := range k8sTestDataMap[c.Name].serviceList.Items {
 		keys = append(keys, obj.Namespace+"/"+obj.Name)
 	}
 	return keys
 }
 
-func (c *k8sCluster) fakeSecretKeys() []string {
+func (c *K8sCacheStore) fakeSecretKeys() []string {
 	keys := []string{}
-	for _, obj := range k8sTestDataMap[c.name].secretList.Items {
+	for _, obj := range k8sTestDataMap[c.Name].secretList.Items {
 		keys = append(keys, obj.Namespace+"/"+obj.Name)
 	}
 	return keys
 }
 
-func (c *k8sCluster) fakeNodeKeys() []string {
+func (c *K8sCacheStore) fakeNodeKeys() []string {
 	keys := []string{}
-	for _, obj := range k8sTestDataMap[c.name].nodeList.Items {
+	for _, obj := range k8sTestDataMap[c.Name].nodeList.Items {
 		keys = append(keys, obj.Name)
 	}
 	return keys
