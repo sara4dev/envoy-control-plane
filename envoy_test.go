@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"git.target.com/Kubernetes/envoy-control-plane/pkg/data"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/listener"
@@ -31,16 +32,16 @@ var testEnvoyCluster EnvoyCluster
 func setupEnvoyTest() {
 
 	testEnvoyCluster = EnvoyCluster{}
-	testEnvoyCluster.k8sCacheStoreMap = make(map[string]*K8sCacheStore)
-	testEnvoyCluster.k8sCacheStoreMap["cluster1"] = &K8sCacheStore{
+	testEnvoyCluster.k8sCacheStoreMap = make(map[string]*data.K8sCacheStore)
+	testEnvoyCluster.k8sCacheStoreMap["cluster1"] = &data.K8sCacheStore{
 		Name:     "cluster1",
-		Zone:     TTC,
+		Zone:     data.TTC,
 		Priority: 0,
 	}
 
-	testEnvoyCluster.k8sCacheStoreMap["cluster2"] = &K8sCacheStore{
+	testEnvoyCluster.k8sCacheStoreMap["cluster2"] = &data.K8sCacheStore{
 		Name:     "cluster2",
-		Zone:     TTE,
+		Zone:     data.TTE,
 		Priority: 1,
 	}
 

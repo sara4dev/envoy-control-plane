@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"git.target.com/Kubernetes/envoy-control-plane/pkg/data"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/auth"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
@@ -33,7 +34,7 @@ type EnvoyCluster struct {
 	envoySnapshotCache envoycache.SnapshotCache
 	version            int32
 	tlsDataCache       sync.Map
-	k8sCacheStoreMap   map[string]*K8sCacheStore
+	k8sCacheStoreMap   map[string]*data.K8sCacheStore
 }
 
 type k8sService struct {
@@ -315,7 +316,7 @@ func getClusterName(k8sNamespace string, k8singressHost string, k8sServiceName s
 	//return k8sNamespace + ":" + k8sServiceName + ":" + fmt.Sprint(k8sServicePort)
 }
 
-func getTLS(k8sCluster *K8sCacheStore, namespace string, tlsSecretName string) *auth.DownstreamTlsContext {
+func getTLS(k8sCluster *data.K8sCacheStore, namespace string, tlsSecretName string) *auth.DownstreamTlsContext {
 	tls := &auth.DownstreamTlsContext{}
 	tls.CommonTlsContext = &auth.CommonTlsContext{
 		TlsCertificates: []*auth.TlsCertificate{},
@@ -331,7 +332,7 @@ func getTLS(k8sCluster *K8sCacheStore, namespace string, tlsSecretName string) *
 	return tls
 }
 
-func getTLSData(k8sCluster *K8sCacheStore, namespace string, tlsSecretName string) *auth.TlsCertificate {
+func getTLSData(k8sCluster *data.K8sCacheStore, namespace string, tlsSecretName string) *auth.TlsCertificate {
 	key := k8sCluster.Name + "--" + namespace + "--" + tlsSecretName
 	tlsCertificate := auth.TlsCertificate{}
 	value, ok := envoyCluster.tlsDataCache.Load(key)
@@ -580,7 +581,7 @@ func makeConnectionManager(virtualHosts []route.VirtualHost) *hcm.HttpConnection
 	}
 }
 
-func findService(k8sCluster *K8sCacheStore, namespace string, serviceName string) *v1.Service {
+func findService(k8sCluster *data.K8sCacheStore, namespace string, serviceName string) *v1.Service {
 	for _, serviceObj := range k8sCluster.ServiceCacheStore.List() {
 		service := serviceObj.(*v1.Service)
 		if service.Namespace == namespace && service.Name == serviceName {
@@ -590,7 +591,7 @@ func findService(k8sCluster *K8sCacheStore, namespace string, serviceName string
 	return nil
 }
 
-func makeVirtualHost(k8sCluster *K8sCacheStore, namespace string, ingressRule extbeta1.IngressRule) route.VirtualHost {
+func makeVirtualHost(k8sCluster *data.K8sCacheStore, namespace string, ingressRule extbeta1.IngressRule) route.VirtualHost {
 
 	routes := []route.Route{}
 

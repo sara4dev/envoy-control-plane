@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"git.target.com/Kubernetes/envoy-control-plane/pkg/data"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	log "github.com/sirupsen/logrus"
@@ -57,7 +58,7 @@ var (
 )
 
 func RunK8sControllers(ctx *cli.Context, envoyCluster EnvoyCluster) {
-	envoyCluster.k8sCacheStoreMap = make(map[string]*K8sCacheStore)
+	envoyCluster.k8sCacheStoreMap = make(map[string]*data.K8sCacheStore)
 	k8sClusters := []*k8sCluster{
 		{
 			name: "tgt-ttc-bigoli-test",
@@ -71,9 +72,9 @@ func RunK8sControllers(ctx *cli.Context, envoyCluster EnvoyCluster) {
 
 	for _, k8sCluster := range k8sClusters {
 		k8sCluster.setClusterPriority(ctx.String("zone"))
-		k8sCacheStore := K8sCacheStore{
+		k8sCacheStore := data.K8sCacheStore{
 			Name:     k8sCluster.name,
-			Zone:     k8sCluster.zone,
+			Zone:     data.Zone(k8sCluster.zone),
 			Priority: k8sCluster.priority,
 		}
 		envoyCluster.k8sCacheStoreMap[k8sCluster.name] = &k8sCacheStore
