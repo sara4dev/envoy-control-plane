@@ -257,9 +257,9 @@ func TestAddedIngress_new_ingress_added(t *testing.T) {
 		newIngress := extbeta1.Ingress{}
 		loadObjFromFile("../test/data/"+k8sCluster.name+"-newIngress.yml", &newIngress)
 		k8sCluster.addedObj(&newIngress)
-		//Check if the Envoy Snapshot is called for new ingress
+		//Check if the makeEnvoyCluster Snapshot is called for new ingress
 		if _envoyCluster.Version != i {
-			t.Error("Envoy Snapshot is not called")
+			t.Error("makeEnvoyCluster Snapshot is not called")
 		}
 		i++
 	}
@@ -278,9 +278,9 @@ func TestAddedIngress_initial_ingress_added(t *testing.T) {
 		newIngress := extbeta1.Ingress{}
 		loadObjFromFile("../test/data/"+k8sCluster.name+"-initialIngress.yml", &newIngress)
 		k8sCluster.addedObj(&newIngress)
-		//Check if the Envoy Snapshot is NOT called for initial existing ingress
+		//Check if the makeEnvoyCluster Snapshot is NOT called for initial existing ingress
 		if _envoyCluster.Version != 0 {
-			t.Error("Envoy Snapshot should not be called")
+			t.Error("makeEnvoyCluster Snapshot should not be called")
 		}
 	}
 
@@ -303,9 +303,9 @@ func TestUpdatedIngress_new_ingress_updated(t *testing.T) {
 		loadObjFromFile("../test/data/"+k8sCluster.name+"-newIngress-updated.yml", &newObj)
 
 		k8sCluster.updatedObj(&oldObj, &newObj)
-		//Check if the Envoy Snapshot is called for updated ingress
+		//Check if the makeEnvoyCluster Snapshot is called for updated ingress
 		if _envoyCluster.Version != i {
-			t.Error("Envoy Snapshot is not called")
+			t.Error("makeEnvoyCluster Snapshot is not called")
 		}
 		i++
 	}
@@ -328,9 +328,9 @@ func TestUpdatedIngress_new_ingress_status_updated(t *testing.T) {
 		loadObjFromFile("../test/data/"+k8sCluster.name+"-newIngress-statusUpdated.yml", &newObj)
 
 		k8sCluster.updatedObj(&oldObj, &newObj)
-		//Check if the Envoy Snapshot is NOT called for status updates
+		//Check if the makeEnvoyCluster Snapshot is NOT called for status updates
 		if _envoyCluster.Version != 0 {
-			t.Error("Envoy Snapshot should not be called")
+			t.Error("makeEnvoyCluster Snapshot should not be called")
 		}
 	}
 
@@ -351,9 +351,9 @@ func TestDeletedIngress_delete_initial_ingress(t *testing.T) {
 		loadObjFromFile("../test/data/"+k8sCluster.name+"-initialIngress.yml", &delObj)
 
 		k8sCluster.deletedObj(&delObj)
-		//Check if the Envoy Snapshot is NOT called for status updates
+		//Check if the makeEnvoyCluster Snapshot is NOT called for status updates
 		if _envoyCluster.Version != i {
-			t.Error("Envoy Snapshot is not called")
+			t.Error("makeEnvoyCluster Snapshot is not called")
 		}
 		if len(k8sCluster.initialIngresses) != initialIngressCount-1 {
 			t.Error("Ingress is not deleted from InitialIngress cache")
