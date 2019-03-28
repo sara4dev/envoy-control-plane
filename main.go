@@ -2,6 +2,7 @@ package main
 
 import (
 	"git.target.com/Kubernetes/envoy-control-plane/pkg/envoy"
+	"git.target.com/Kubernetes/envoy-control-plane/pkg/k8s"
 	"github.com/urfave/cli"
 	"os"
 	"runtime"
@@ -13,8 +14,6 @@ import (
 //type k8sController struct {
 //	clusterName string
 //}
-
-var envoyCluster envoy.EnvoyCluster
 
 func main() {
 	app := cli.NewApp()
@@ -44,7 +43,7 @@ func run(ctx *cli.Context) error {
 	//resyncPeriod = time.Minute * 1
 	envoyCluster := envoy.NewEnvoyCluster()
 
-	RunK8sControllers(ctx, envoyCluster)
+	k8s.RunK8sControllers(ctx, envoyCluster)
 
 	envoyCluster.RunManagementServer(context.Background(), 8080)
 	return nil

@@ -1,4 +1,4 @@
-package main
+package k8s
 
 import (
 	"fmt"
@@ -23,6 +23,8 @@ import (
 	"strings"
 	"time"
 )
+
+var _envoyCluster *envoy.EnvoyCluster
 
 type zone int
 
@@ -59,6 +61,7 @@ var (
 )
 
 func RunK8sControllers(ctx *cli.Context, envoyCluster *envoy.EnvoyCluster) {
+	_envoyCluster = envoyCluster
 	envoyCluster.K8sCacheStoreMap = make(map[string]*data.K8sCacheStore)
 	k8sClusters := []*k8sCluster{
 		{
@@ -220,7 +223,7 @@ func (c *k8sCluster) addedObj(obj interface{}) {
 	}
 
 	log.Infof("added k8s %T  --> %v:%v:%v", obj, c.name, objNamespace, objName)
-	envoyCluster.CreateEnvoySnapshot()
+	_envoyCluster.CreateEnvoySnapshot()
 }
 
 func (c *k8sCluster) updatedObj(oldObj interface{}, newObj interface{}) {
@@ -253,7 +256,7 @@ func (c *k8sCluster) updatedObj(oldObj interface{}, newObj interface{}) {
 		return
 	}
 	log.Infof("updated k8s %T --> %v:%v:%v", oldObj, c.name, objNamespace, objName)
-	envoyCluster.CreateEnvoySnapshot()
+	_envoyCluster.CreateEnvoySnapshot()
 }
 
 func (c *k8sCluster) deletedObj(obj interface{}) {
@@ -298,7 +301,7 @@ func (c *k8sCluster) deletedObj(obj interface{}) {
 			break
 		}
 	}
-	envoyCluster.CreateEnvoySnapshot()
+	_envoyCluster.CreateEnvoySnapshot()
 }
 
 // NewKubeClient k8s client.
