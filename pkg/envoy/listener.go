@@ -71,7 +71,7 @@ func (e *EnvoyCluster) makeEnvoyHttpListerners(envoyHttpListenersChan chan []cac
 		log.Fatal("Error in converting connection manager")
 	}
 
-	filterChain := e.makeEnvoyListenerFilterChain(httpConfig)
+	filterChain := e.makeEnvoyListenerFilterChain(httpConfig, nil, nil)
 	envoyListener := e.makeEnvoyListener("http", 80, []listener.FilterChain{filterChain})
 	envoyListeners = append(envoyListeners, envoyListener)
 	envoyHttpListenersChan <- envoyListeners
@@ -94,8 +94,10 @@ func (e *EnvoyCluster) makeEnvoyListener(name string, port uint32, filterChains 
 	}
 }
 
-func (e *EnvoyCluster) makeEnvoyListenerFilterChain(httpConfig *types.Any) listener.FilterChain {
+func (e *EnvoyCluster) makeEnvoyListenerFilterChain(httpConfig *types.Any, tlsContext *auth.DownstreamTlsContext, filterChainMatch *listener.FilterChainMatch) listener.FilterChain {
 	return listener.FilterChain{
+		TlsContext:       tlsContext,
+		FilterChainMatch: filterChainMatch,
 		Filters: []listener.Filter{
 			{
 				Name: util.HTTPConnectionManager,
@@ -134,20 +136,11 @@ func (e *EnvoyCluster) makeEnvoyHttpsListerners(envoyHttpsListenersChan chan []c
 						log.Fatal("Error in converting connection manager")
 					}
 
-					filterChain := listener.FilterChain{
-						TlsContext: e.getTLS(k8sCluster, ingress.Namespace, tlsSecretsMap[ingressRule.Host]),
-						FilterChainMatch: &listener.FilterChainMatch{
-							ServerNames: []string{ingressRule.Host},
-						},
-						Filters: []listener.Filter{
-							{
-								Name: util.HTTPConnectionManager,
-								ConfigType: &listener.Filter_TypedConfig{
-									TypedConfig: httpConfig,
-								},
-							},
-						},
+					tlsContext := e.getTLS(k8sCluster, ingress.Namespace, tlsSecretsMap[ingressRule.Host])
+					filterChainMatch := &listener.FilterChainMatch{
+						ServerNames: []string{ingressRule.Host},
 					}
+					filterChain := e.makeEnvoyListenerFilterChain(httpConfig, tlsContext, filterChainMatch)
 
 					existingFilterChain := listenerFilerChainsMap[ingressRule.Host]
 					if existingFilterChain.FilterChainMatch != nil {
@@ -234,26 +227,7 @@ func makeVirtualHost(k8sCluster *data.K8sCacheStore, namespace string, ingressRu
 		service := findService(k8sCluster, namespace, httpPath.Backend.ServiceName)
 		if service != nil {
 			if service.Spec.Type == v1.ServiceTypeNodePort {
-				route := route.Route{
-					Match: route.RouteMatch{
-						PathSpecifier: &route.RouteMatch_Prefix{
-							Prefix: httpPath.Path,
-						},
-					},
-					Action: &route.Route_Route{
-						Route: &route.RouteAction{
-							//Timeout: &vhost.Timeout,
-							ClusterSpecifier: &route.RouteAction_Cluster{
-								Cluster: getClusterName(namespace, ingressRule.Host, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal),
-							},
-							//RetryPolicy: &route.RetryPolicy {
-							//	RetryOn:       "5xx",
-							//	PerTryTimeout: time.Second * 20,
-							//},
-						},
-					},
-				}
-
+				route := makeRoute(httpPath, namespace, ingressRule)
 				routes = append(routes, route)
 			}
 		}
@@ -265,6 +239,29 @@ func makeVirtualHost(k8sCluster *data.K8sCacheStore, namespace string, ingressRu
 		Routes:  routes,
 	}
 	return virtualHost
+}
+
+func makeRoute(httpPath v1beta1.HTTPIngressPath, namespace string, ingressRule v1beta1.IngressRule) route.Route {
+	return route.Route{
+		Match: route.RouteMatch{
+			PathSpecifier: &route.RouteMatch_Prefix{
+				Prefix: httpPath.Path,
+			},
+		},
+		Action: &route.Route_Route{
+			Route: &route.RouteAction{
+				//TODO Add retry?
+				//Timeout: &vhost.Timeout,
+				ClusterSpecifier: &route.RouteAction_Cluster{
+					Cluster: getClusterName(namespace, ingressRule.Host, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal),
+				},
+				//RetryPolicy: &route.RetryPolicy {
+				//	RetryOn:       "5xx",
+				//	PerTryTimeout: time.Second * 20,
+				//},
+			},
+		},
+	}
 }
 
 func (e *EnvoyCluster) getTLS(k8sCluster *data.K8sCacheStore, namespace string, tlsSecretName string) *auth.DownstreamTlsContext {
