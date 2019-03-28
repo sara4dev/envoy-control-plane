@@ -1,4 +1,4 @@
-package main
+package envoy
 
 import (
 	"bytes"
@@ -11,8 +11,11 @@ import (
 	"github.com/gogo/protobuf/types"
 	"k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	k8scache "k8s.io/client-go/tools/cache"
 	"log"
+	"os"
 	"testing"
 )
 
@@ -32,68 +35,79 @@ var testEnvoyCluster EnvoyCluster
 func setupEnvoyTest() {
 
 	testEnvoyCluster = EnvoyCluster{}
-	testEnvoyCluster.k8sCacheStoreMap = make(map[string]*data.K8sCacheStore)
-	testEnvoyCluster.k8sCacheStoreMap["cluster1"] = &data.K8sCacheStore{
+	testEnvoyCluster.K8sCacheStoreMap = make(map[string]*data.K8sCacheStore)
+	testEnvoyCluster.K8sCacheStoreMap["cluster1"] = &data.K8sCacheStore{
 		Name:     "cluster1",
 		Zone:     data.TTC,
 		Priority: 0,
 	}
 
-	testEnvoyCluster.k8sCacheStoreMap["cluster2"] = &data.K8sCacheStore{
+	testEnvoyCluster.K8sCacheStoreMap["cluster2"] = &data.K8sCacheStore{
 		Name:     "cluster2",
 		Zone:     data.TTE,
 		Priority: 1,
 	}
 
 	k8sTestDataMap = make(map[string]*k8sTestData)
-	for _, k8sCacheStore := range testEnvoyCluster.k8sCacheStoreMap {
+	for _, k8sCacheStore := range testEnvoyCluster.K8sCacheStoreMap {
 		k8sTestDataMap[k8sCacheStore.Name] = &k8sTestData{
 			clusterName: k8sCacheStore.Name,
 		}
 	}
 
 	for _, k8sTestData := range k8sTestDataMap {
-		k8sCacheStore := testEnvoyCluster.k8sCacheStoreMap[k8sTestData.clusterName]
+		k8sCacheStore := testEnvoyCluster.K8sCacheStoreMap[k8sTestData.clusterName]
 		loadTestData(k8sTestData)
 		k8sCacheStore.IngressCacheStore = &k8scache.FakeCustomStore{
 			ListKeysFunc: k8sTestData.fakeIngressKeys,
 			ListFunc:     k8sTestData.fakeIngresses,
 			GetByKeyFunc: k8sTestData.fakeIngressByKey,
 		}
-		//k8sCluster.initialIngresses = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].IngressCacheStore.ListKeys()
+		//k8sCluster.initialIngresses = testEnvoyCluster.K8sCacheStoreMap[k8sCluster.name].IngressCacheStore.ListKeys()
 		k8sCacheStore.ServiceCacheStore = &k8scache.FakeCustomStore{
 			ListKeysFunc: k8sTestData.fakeServiceKeys,
 			ListFunc:     k8sTestData.fakeServices,
 			GetByKeyFunc: k8sTestData.fakeServiceByKey,
 		}
-		//k8sCluster.initialServices = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].ServiceCacheStore.ListKeys()
+		//k8sCluster.initialServices = testEnvoyCluster.K8sCacheStoreMap[k8sCluster.name].ServiceCacheStore.ListKeys()
 		k8sCacheStore.SecretCacheStore = &k8scache.FakeCustomStore{
 			ListKeysFunc: k8sTestData.fakeSecretKeys,
 			ListFunc:     k8sTestData.fakeSecrets,
 			GetByKeyFunc: k8sTestData.fakeSecretByKey,
 		}
-		//k8sCluster.initialSecrets = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].SecretCacheStore.ListKeys()
+		//k8sCluster.initialSecrets = testEnvoyCluster.K8sCacheStoreMap[k8sCluster.name].SecretCacheStore.ListKeys()
 		k8sCacheStore.NodeCacheStore = &k8scache.FakeCustomStore{
 			ListKeysFunc: k8sTestData.fakeNodeKeys,
 			ListFunc:     k8sTestData.fakeNodes,
 			GetByKeyFunc: k8sTestData.fakeNodeByKey,
 		}
-		//k8sCluster.initialNodes = testEnvoyCluster.k8sCacheStoreMap[k8sCluster.name].NodeCacheStore.ListKeys()
+		//k8sCluster.initialNodes = testEnvoyCluster.K8sCacheStoreMap[k8sCluster.name].NodeCacheStore.ListKeys()
 	}
 }
 
 func loadTestData(k8sTestData *k8sTestData) {
 	//load fake ingresses
-	loadObjFromFile("test-data/"+k8sTestData.clusterName+"-ingressList.yml", &k8sTestData.ingressList)
+	loadObjFromFile("../test/data/"+k8sTestData.clusterName+"-ingressList.yml", &k8sTestData.ingressList)
 
 	//load fake services
-	loadObjFromFile("test-data/"+k8sTestData.clusterName+"-serviceList.yml", &k8sTestData.serviceList)
+	loadObjFromFile("../test/data/"+k8sTestData.clusterName+"-serviceList.yml", &k8sTestData.serviceList)
 
 	//load fake secrets
-	loadObjFromFile("test-data/"+k8sTestData.clusterName+"-secretList.yml", &k8sTestData.secretList)
+	loadObjFromFile("../test/data/"+k8sTestData.clusterName+"-secretList.yml", &k8sTestData.secretList)
 
 	//load fake nodes
-	loadObjFromFile("test-data/"+k8sTestData.clusterName+"-nodeList.yml", &k8sTestData.nodeList)
+	loadObjFromFile("../test/data/"+k8sTestData.clusterName+"-nodeList.yml", &k8sTestData.nodeList)
+}
+
+func loadObjFromFile(fileName string, obj runtime.Object) {
+	reader, err := os.Open(fileName)
+	if err != nil {
+		log.Fatal("Failed to open file " + fileName)
+	}
+	err = yaml.NewYAMLOrJSONDecoder(reader, 2048).Decode(&obj)
+	if err != nil {
+		log.Fatal("Failed to parse obj: " + obj.GetObjectKind().GroupVersionKind().Kind)
+	}
 }
 
 func (c *k8sTestData) fakeIngresses() []interface{} {
@@ -362,7 +376,7 @@ func TestMakeEnvoyListeners_http(t *testing.T) {
 			matchedTestListener = true
 			typedConfig := envoyListener.FilterChains[0].Filters[0].ConfigType.(*listener.Filter_TypedConfig)
 			httpConnectionManager := hcm.HttpConnectionManager{}
-			err = types.UnmarshalAny(typedConfig.TypedConfig, &httpConnectionManager)
+			err := types.UnmarshalAny(typedConfig.TypedConfig, &httpConnectionManager)
 			if err != nil {
 				t.Error("Error in unmarshalling HttpConnectionManager")
 			}

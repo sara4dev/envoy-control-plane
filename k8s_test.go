@@ -2,6 +2,7 @@ package main
 
 import (
 	"git.target.com/Kubernetes/envoy-control-plane/pkg/data"
+	"git.target.com/Kubernetes/envoy-control-plane/pkg/envoy"
 	envoycache "github.com/envoyproxy/go-control-plane/pkg/cache"
 	"k8s.io/api/core/v1"
 	extbeta1 "k8s.io/api/extensions/v1beta1"
@@ -44,7 +45,7 @@ type k8sTestData_1 struct {
 }
 
 var k8sTestDataMap_1 map[string]*k8sTestData_1
-var testEnvoyCluster_1 EnvoyCluster
+var testEnvoyCluster_1 envoy.EnvoyCluster
 var testK8sClusters []*k8sCluster
 
 // Test Data Setup
@@ -61,15 +62,15 @@ func setupK8sTest() {
 			zone: TTE,
 		},
 	}
-	testEnvoyCluster_1 = EnvoyCluster{}
-	testEnvoyCluster_1.k8sCacheStoreMap = make(map[string]*data.K8sCacheStore)
-	testEnvoyCluster_1.k8sCacheStoreMap["cluster1"] = &data.K8sCacheStore{
+	testEnvoyCluster_1 = envoy.EnvoyCluster{}
+	testEnvoyCluster_1.K8sCacheStoreMap = make(map[string]*data.K8sCacheStore)
+	testEnvoyCluster_1.K8sCacheStoreMap["cluster1"] = &data.K8sCacheStore{
 		Name:     "cluster1",
 		Zone:     data.TTC,
 		Priority: 0,
 	}
 
-	testEnvoyCluster_1.k8sCacheStoreMap["cluster2"] = &data.K8sCacheStore{
+	testEnvoyCluster_1.K8sCacheStoreMap["cluster2"] = &data.K8sCacheStore{
 		Name:     "cluster2",
 		Zone:     data.TTE,
 		Priority: 1,
@@ -77,14 +78,14 @@ func setupK8sTest() {
 
 	k8sTestDataMap_1 = make(map[string]*k8sTestData_1)
 
-	for _, k8sCacheStore := range testEnvoyCluster_1.k8sCacheStoreMap {
+	for _, k8sCacheStore := range testEnvoyCluster_1.K8sCacheStoreMap {
 		k8sTestDataMap_1[k8sCacheStore.Name] = &k8sTestData_1{
 			clusterName: k8sCacheStore.Name,
 		}
 	}
 
 	for _, testK8sCluster := range testK8sClusters {
-		k8sCacheStore := testEnvoyCluster_1.k8sCacheStoreMap[testK8sCluster.name]
+		k8sCacheStore := testEnvoyCluster_1.K8sCacheStoreMap[testK8sCluster.name]
 		k8sTestData_1 := k8sTestDataMap_1[testK8sCluster.name]
 		loadTestK8sData(k8sTestData_1)
 		k8sCacheStore.IngressCacheStore = &k8scache.FakeCustomStore{
@@ -247,8 +248,8 @@ func (c *k8sTestData_1) fakeK8sNodeKeys() []string {
 func TestAddedIngress_new_ingress_added(t *testing.T) {
 	tested := false
 	setupK8sTest()
-	envoyCluster = EnvoyCluster{
-		envoySnapshotCache: &fakeSnapshotCache{},
+	envoyCluster = envoy.EnvoyCluster{
+		EnvoySnapshotCache: &fakeSnapshotCache{},
 	}
 	var i int32 = 1
 	for _, k8sCluster := range testK8sClusters {
@@ -257,7 +258,7 @@ func TestAddedIngress_new_ingress_added(t *testing.T) {
 		loadObjFromFile("test-data/"+k8sCluster.name+"-newIngress.yml", &newIngress)
 		k8sCluster.addedObj(&newIngress)
 		//Check if the Envoy Snapshot is called for new ingress
-		if envoyCluster.version != i {
+		if envoyCluster.Version != i {
 			t.Error("Envoy Snapshot is not called")
 		}
 		i++
@@ -270,8 +271,8 @@ func TestAddedIngress_new_ingress_added(t *testing.T) {
 
 func TestAddedIngress_initial_ingress_added(t *testing.T) {
 	tested := false
-	envoyCluster = EnvoyCluster{
-		envoySnapshotCache: &fakeSnapshotCache{},
+	envoyCluster = envoy.EnvoyCluster{
+		EnvoySnapshotCache: &fakeSnapshotCache{},
 	}
 	for _, k8sCluster := range testK8sClusters {
 		tested = true
@@ -279,7 +280,7 @@ func TestAddedIngress_initial_ingress_added(t *testing.T) {
 		loadObjFromFile("test-data/"+k8sCluster.name+"-initialIngress.yml", &newIngress)
 		k8sCluster.addedObj(&newIngress)
 		//Check if the Envoy Snapshot is NOT called for initial existing ingress
-		if envoyCluster.version != 0 {
+		if envoyCluster.Version != 0 {
 			t.Error("Envoy Snapshot should not be called")
 		}
 	}
@@ -291,8 +292,8 @@ func TestAddedIngress_initial_ingress_added(t *testing.T) {
 
 func TestUpdatedIngress_new_ingress_updated(t *testing.T) {
 	tested := false
-	envoyCluster = EnvoyCluster{
-		envoySnapshotCache: &fakeSnapshotCache{},
+	envoyCluster = envoy.EnvoyCluster{
+		EnvoySnapshotCache: &fakeSnapshotCache{},
 	}
 	var i int32 = 1
 	for _, k8sCluster := range testK8sClusters {
@@ -305,7 +306,7 @@ func TestUpdatedIngress_new_ingress_updated(t *testing.T) {
 
 		k8sCluster.updatedObj(&oldObj, &newObj)
 		//Check if the Envoy Snapshot is called for updated ingress
-		if envoyCluster.version != i {
+		if envoyCluster.Version != i {
 			t.Error("Envoy Snapshot is not called")
 		}
 		i++
@@ -318,8 +319,8 @@ func TestUpdatedIngress_new_ingress_updated(t *testing.T) {
 
 func TestUpdatedIngress_new_ingress_status_updated(t *testing.T) {
 	tested := false
-	envoyCluster = EnvoyCluster{
-		envoySnapshotCache: &fakeSnapshotCache{},
+	envoyCluster = envoy.EnvoyCluster{
+		EnvoySnapshotCache: &fakeSnapshotCache{},
 	}
 	for _, k8sCluster := range testK8sClusters {
 		tested = true
@@ -331,7 +332,7 @@ func TestUpdatedIngress_new_ingress_status_updated(t *testing.T) {
 
 		k8sCluster.updatedObj(&oldObj, &newObj)
 		//Check if the Envoy Snapshot is NOT called for status updates
-		if envoyCluster.version != 0 {
+		if envoyCluster.Version != 0 {
 			t.Error("Envoy Snapshot should not be called")
 		}
 	}
@@ -343,8 +344,8 @@ func TestUpdatedIngress_new_ingress_status_updated(t *testing.T) {
 
 func TestDeletedIngress_delete_initial_ingress(t *testing.T) {
 	tested := false
-	envoyCluster = EnvoyCluster{
-		envoySnapshotCache: &fakeSnapshotCache{},
+	envoyCluster = envoy.EnvoyCluster{
+		EnvoySnapshotCache: &fakeSnapshotCache{},
 	}
 	var i int32 = 1
 	for _, k8sCluster := range testK8sClusters {
@@ -355,7 +356,7 @@ func TestDeletedIngress_delete_initial_ingress(t *testing.T) {
 
 		k8sCluster.deletedObj(&delObj)
 		//Check if the Envoy Snapshot is NOT called for status updates
-		if envoyCluster.version != i {
+		if envoyCluster.Version != i {
 			t.Error("Envoy Snapshot is not called")
 		}
 		if len(k8sCluster.initialIngresses) != initialIngressCount-1 {

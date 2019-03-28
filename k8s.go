@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"git.target.com/Kubernetes/envoy-control-plane/pkg/data"
+	"git.target.com/Kubernetes/envoy-control-plane/pkg/envoy"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	log "github.com/sirupsen/logrus"
@@ -57,8 +58,8 @@ var (
 	watchNamespaces string
 )
 
-func RunK8sControllers(ctx *cli.Context, envoyCluster EnvoyCluster) {
-	envoyCluster.k8sCacheStoreMap = make(map[string]*data.K8sCacheStore)
+func RunK8sControllers(ctx *cli.Context, envoyCluster *envoy.EnvoyCluster) {
+	envoyCluster.K8sCacheStoreMap = make(map[string]*data.K8sCacheStore)
 	k8sClusters := []*k8sCluster{
 		{
 			name: "tgt-ttc-bigoli-test",
@@ -77,14 +78,14 @@ func RunK8sControllers(ctx *cli.Context, envoyCluster EnvoyCluster) {
 			Zone:     data.Zone(k8sCluster.zone),
 			Priority: k8sCluster.priority,
 		}
-		envoyCluster.k8sCacheStoreMap[k8sCluster.name] = &k8sCacheStore
+		envoyCluster.K8sCacheStoreMap[k8sCluster.name] = &k8sCacheStore
 		err = k8sCluster.startK8sControllers(ctx.String("kube-config"), envoyCluster)
 		if err != nil {
 			log.Fatal("Fatal Error occurred: " + err.Error())
 		}
 	}
 	//Create the first snapshot once the cache store is updated
-	envoyCluster.createEnvoySnapshot()
+	envoyCluster.CreateEnvoySnapshot()
 
 	//Add the events to k8s controllers to start watching the events
 	for _, k8sCluster := range k8sClusters {
@@ -102,7 +103,7 @@ func (c *k8sCluster) setClusterPriority(envoyZone string) {
 
 }
 
-func (c *k8sCluster) startK8sControllers(kubeConfigPath string, envoyCluster EnvoyCluster) error {
+func (c *k8sCluster) startK8sControllers(kubeConfigPath string, envoyCluster *envoy.EnvoyCluster) error {
 	c.clientSet, err = newKubeClient(kubeConfigPath, c.name)
 	if err != nil {
 		return err
@@ -141,7 +142,7 @@ func (c *k8sCluster) addK8sEventHandlers() {
 	})
 }
 
-func (c *k8sCluster) watchObjects(resyncPeriod time.Duration, objType runtime.Object, envoyCluster EnvoyCluster) {
+func (c *k8sCluster) watchObjects(resyncPeriod time.Duration, objType runtime.Object, envoyCluster *envoy.EnvoyCluster) {
 	var lw *k8scache.ListWatch
 	var informer *k8scache.SharedInformer
 	var cacheStore *k8scache.Store
@@ -150,22 +151,22 @@ func (c *k8sCluster) watchObjects(resyncPeriod time.Duration, objType runtime.Ob
 	case *extbeta1.Ingress:
 		lw = k8scache.NewListWatchFromClient(c.clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", watchNamespaces, fields.Everything())
 		informer = &c.ingressInformer
-		cacheStore = &envoyCluster.k8sCacheStoreMap[c.name].IngressCacheStore
+		cacheStore = &envoyCluster.K8sCacheStoreMap[c.name].IngressCacheStore
 		initialObjects = &c.initialIngresses
 	case *v1.Service:
 		lw = k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "services", watchNamespaces, fields.Everything())
 		informer = &c.serviceInformer
-		cacheStore = &envoyCluster.k8sCacheStoreMap[c.name].ServiceCacheStore
+		cacheStore = &envoyCluster.K8sCacheStoreMap[c.name].ServiceCacheStore
 		initialObjects = &c.initialServices
 	case *v1.Secret:
 		lw = k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "secrets", watchNamespaces, fields.Everything())
 		informer = &c.secretInformer
-		cacheStore = &envoyCluster.k8sCacheStoreMap[c.name].SecretCacheStore
+		cacheStore = &envoyCluster.K8sCacheStoreMap[c.name].SecretCacheStore
 		initialObjects = &c.initialSecrets
 	case *v1.Node:
 		lw = k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
 		informer = &c.nodeInformer
-		cacheStore = &envoyCluster.k8sCacheStoreMap[c.name].NodeCacheStore
+		cacheStore = &envoyCluster.K8sCacheStoreMap[c.name].NodeCacheStore
 		initialObjects = &c.initialNodes
 	}
 
@@ -219,7 +220,7 @@ func (c *k8sCluster) addedObj(obj interface{}) {
 	}
 
 	log.Infof("added k8s %T  --> %v:%v:%v", obj, c.name, objNamespace, objName)
-	envoyCluster.createEnvoySnapshot()
+	envoyCluster.CreateEnvoySnapshot()
 }
 
 func (c *k8sCluster) updatedObj(oldObj interface{}, newObj interface{}) {
@@ -252,7 +253,7 @@ func (c *k8sCluster) updatedObj(oldObj interface{}, newObj interface{}) {
 		return
 	}
 	log.Infof("updated k8s %T --> %v:%v:%v", oldObj, c.name, objNamespace, objName)
-	envoyCluster.createEnvoySnapshot()
+	envoyCluster.CreateEnvoySnapshot()
 }
 
 func (c *k8sCluster) deletedObj(obj interface{}) {
@@ -297,7 +298,7 @@ func (c *k8sCluster) deletedObj(obj interface{}) {
 			break
 		}
 	}
-	envoyCluster.createEnvoySnapshot()
+	envoyCluster.CreateEnvoySnapshot()
 }
 
 // NewKubeClient k8s client.

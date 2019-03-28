@@ -1,11 +1,11 @@
 package main
 
 import (
+	"git.target.com/Kubernetes/envoy-control-plane/pkg/envoy"
 	"github.com/urfave/cli"
 	"os"
 	"runtime"
 
-	envoycache "github.com/envoyproxy/go-control-plane/pkg/cache"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
@@ -14,7 +14,7 @@ import (
 //	clusterName string
 //}
 
-var envoyCluster EnvoyCluster
+var envoyCluster envoy.EnvoyCluster
 
 func main() {
 	app := cli.NewApp()
@@ -42,8 +42,7 @@ func main() {
 func run(ctx *cli.Context) error {
 	runtime.GOMAXPROCS(2)
 	//resyncPeriod = time.Minute * 1
-	envoyCluster = EnvoyCluster{}
-	envoyCluster.envoySnapshotCache = envoycache.NewSnapshotCache(false, Hasher{}, logger{})
+	envoyCluster := envoy.NewEnvoyCluster()
 
 	RunK8sControllers(ctx, envoyCluster)
 
