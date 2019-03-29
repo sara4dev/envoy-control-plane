@@ -1,0 +1,16 @@
+{{- if .Values.kubeconfig.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: {{ include "envoy-control-plane-helm.fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+  name: {{ include "envoy-control-plane-helm.fullname" . }}
+data:
+  {{- with .Values.config.content }}
+  config:
+{{ toYaml . | indent 4 }}
+  {{- end }}
+{{- end -}}

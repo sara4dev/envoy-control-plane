@@ -34,15 +34,18 @@ spec:
               protocol: TCP
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-{{ if .Values.kubeconfig.enabled }}
           volumeMounts:
           - name: kubeconfig
-            mountPath: "/kubeconfigs"
+            mountPath: "/etc"
+          - name: config
+            mountPath: "/etc"
       volumes:
       - name: kubeconfig
         secret:
           secretName: {{ include "envoy-control-plane-helm.fullname" . }}-kubeconfig
-{{ end }}
+      - name: config
+        configMap:
+          name: {{ include "envoy-control-plane-helm.fullname" . }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

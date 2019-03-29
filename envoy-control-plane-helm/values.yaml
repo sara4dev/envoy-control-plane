@@ -3,7 +3,9 @@ replicaCount: 2
 image: "docker.target.com/kubernetes/envoy-control-plane"
 
 kubeconfig:
-  enabled: true
+  content: |
+    xxx
+config:
   content: |
     xxx
 
