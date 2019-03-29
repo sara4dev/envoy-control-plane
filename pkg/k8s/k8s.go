@@ -195,6 +195,12 @@ func (c *K8sCluster) addedObj(obj interface{}) {
 
 	log.Infof("added k8s %T  --> %v:%v:%v", obj, c.Context, objNamespace, objName)
 	_envoyCluster.CreateEnvoySnapshot()
+	//Add new keys back to initial list, so that we don't end up creating envoySnapshot during resync
+	newkey := objName
+	if objNamespace != "" {
+		newkey = objNamespace + "/" + objName
+	}
+	*initialObjects = append(*initialObjects, newkey)
 }
 
 func (c *K8sCluster) updatedObj(oldObj interface{}, newObj interface{}) {
