@@ -65,7 +65,7 @@ func (e *EnvoyCluster) makeEnvoyHttpListerners(envoyHttpListenersChan chan []cac
 		virtualHosts = append(virtualHosts, value)
 	}
 
-	httpConnectionManager := makeConnectionManager(virtualHosts)
+	httpConnectionManager := makeConnectionManager(virtualHosts, "ingress_http")
 	httpConfig, err := types.MarshalAny(httpConnectionManager)
 	if err != nil {
 		log.Fatal("Error in converting connection manager")
@@ -130,7 +130,7 @@ func (e *EnvoyCluster) makeEnvoyHttpsListerners(envoyHttpsListenersChan chan []c
 					virtualHosts := []route.VirtualHost{
 						makeVirtualHost(k8sCluster, ingress.Namespace, ingressRule),
 					}
-					httpConnectionManager := makeConnectionManager(virtualHosts)
+					httpConnectionManager := makeConnectionManager(virtualHosts, "ingress_https")
 					httpConfig, err := types.MarshalAny(httpConnectionManager)
 					if err != nil {
 						log.Fatal("Error in converting connection manager")
@@ -171,7 +171,7 @@ func (e *EnvoyCluster) makeEnvoyHttpsListerners(envoyHttpsListenersChan chan []c
 	envoyHttpsListenersChan <- envoyListeners
 }
 
-func makeConnectionManager(virtualHosts []route.VirtualHost) *hcm.HttpConnectionManager {
+func makeConnectionManager(virtualHosts []route.VirtualHost, statPrefix string) *hcm.HttpConnectionManager {
 	//accessLogConfig, err := util.MessageToStruct(&fal.FileAccessLog{
 	//	Path:   "/var/log/envoy/access.log",
 	//	Format: jsonFormat,
@@ -181,7 +181,7 @@ func makeConnectionManager(virtualHosts []route.VirtualHost) *hcm.HttpConnection
 	//}
 	return &hcm.HttpConnectionManager{
 		CodecType:  hcm.AUTO,
-		StatPrefix: "ingress_http",
+		StatPrefix: statPrefix,
 		HttpFilters: []*hcm.HttpFilter{&hcm.HttpFilter{
 			Name: "envoy.router",
 		}},
