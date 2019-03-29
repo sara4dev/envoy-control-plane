@@ -9,6 +9,6 @@ metadata:
   name: {{ include "envoy-control-plane-helm.fullname" . }}
 data:
   {{- with .Values.config.content }}
-  config:
+  config.yaml:
 {{ toYaml . | indent 4 }}
   {{- end }}
