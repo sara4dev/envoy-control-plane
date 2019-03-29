@@ -34,7 +34,8 @@ pipeline:
       - "export PATH=\"$${PATH}:$${GOPATH}/bin\""
       - "export GO111MODULE=on"
       - "wget http://browserconfig.target.com/tgt-certs/tgt-ca-bundle.crt --output-document=/usr/local/share/ca-certificates/tgt-ca-bundle.crt && update-ca-certificates --fresh 2>&1"
-      - "go test --cover"
+      - "go test ./pkg/k8s -v -cover"
+      - "go test ./pkg/envoy -v -cover"
       - "go build"
 
   build-docker-pr:
