@@ -36,9 +36,9 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
           - name: kubeconfig
-            mountPath: "/etc"
+            mountPath: "/etc/envoy-control-plane"
           - name: config
-            mountPath: "/etc"
+            mountPath: "/etc/envoy-control-plane"
       volumes:
       - name: kubeconfig
         secret:
