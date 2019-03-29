@@ -12,3 +12,4 @@ For each Service you are planning to use in the multi-cluster ingress, it must b
 * Have the same service name in all of the clusters.
 * Be in the same namespace in all of the clusters.
 * Be of type NodePort.
+
