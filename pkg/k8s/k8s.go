@@ -7,77 +7,53 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	log "github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
 	"k8s.io/api/core/v1"
-	extbeta1 "k8s.io/api/extensions/v1beta1"
+	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-	restclient "k8s.io/client-go/rest"
-	k8scache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	"strconv"
+	"k8s.io/client-go/tools/clientcmd/api"
 	"strings"
 	"time"
 )
 
 var _envoyCluster *envoy.EnvoyCluster
 
-type zone int
-
-//TODO remove hardcoded zone
-const (
-	TTC zone = 0
-	TTE zone = 1
-)
-
-type k8sCluster struct {
-	name             string
-	zone             zone
+type K8sCluster struct {
+	Context          string `yaml:"context"`
+	Zone             string `yaml:"zone"`
 	priority         uint32
 	clientSet        kubernetes.Interface
-	ingressInformer  k8scache.SharedInformer
+	ingressInformer  cache.SharedInformer
 	initialIngresses []string
-	serviceInformer  k8scache.SharedInformer
+	serviceInformer  cache.SharedInformer
 	initialServices  []string
-	secretInformer   k8scache.SharedInformer
+	secretInformer   cache.SharedInformer
 	initialSecrets   []string
-	nodeInformer     k8scache.SharedInformer
+	nodeInformer     cache.SharedInformer
 	initialNodes     []string
 }
 
-var (
-	resyncPeriod    time.Duration
-	err             error
-	watchNamespaces string
-)
+var err error
 
-func RunK8sControllers(ctx *cli.Context, envoyCluster *envoy.EnvoyCluster) {
+func RunK8sControllers(envoyCluster *envoy.EnvoyCluster, k8sClusters []*K8sCluster, zone string, kubeConfigPath string, resyncPeriod time.Duration) {
 	_envoyCluster = envoyCluster
 	envoyCluster.K8sCacheStoreMap = make(map[string]*data.K8sCacheStore)
-	k8sClusters := []*k8sCluster{
-		{
-			name: "tgt-ttc-bigoli-test",
-			zone: TTC,
-		},
-		{
-			name: "tgt-tte-bigoli-test",
-			zone: TTE,
-		},
-	}
 
 	for _, k8sCluster := range k8sClusters {
-		k8sCluster.setClusterPriority(ctx.String("zone"))
+		k8sCluster.setClusterPriority(zone)
 		k8sCacheStore := data.K8sCacheStore{
-			Name:     k8sCluster.name,
-			Zone:     data.Zone(k8sCluster.zone),
+			Name:     k8sCluster.Context,
+			Zone:     k8sCluster.Zone,
 			Priority: k8sCluster.priority,
 		}
-		envoyCluster.K8sCacheStoreMap[k8sCluster.name] = &k8sCacheStore
-		err = k8sCluster.startK8sControllers(ctx.String("kube-config"), envoyCluster)
+		envoyCluster.K8sCacheStoreMap[k8sCluster.Context] = &k8sCacheStore
+		err = k8sCluster.startK8sControllers(kubeConfigPath, envoyCluster, resyncPeriod)
 		if err != nil {
 			log.Fatal("Fatal Error occurred: " + err.Error())
 		}
@@ -92,8 +68,8 @@ func RunK8sControllers(ctx *cli.Context, envoyCluster *envoy.EnvoyCluster) {
 
 }
 
-func (c *k8sCluster) setClusterPriority(envoyZone string) {
-	if strings.ToLower(strconv.Itoa(int(c.zone))) == strings.ToLower(envoyZone) {
+func (c *K8sCluster) setClusterPriority(envoyZone string) {
+	if strings.ToLower(c.Zone) == strings.ToLower(envoyZone) {
 		c.priority = 0
 	} else {
 		c.priority = 1
@@ -101,90 +77,90 @@ func (c *k8sCluster) setClusterPriority(envoyZone string) {
 
 }
 
-func (c *k8sCluster) startK8sControllers(kubeConfigPath string, envoyCluster *envoy.EnvoyCluster) error {
-	c.clientSet, err = newKubeClient(kubeConfigPath, c.name)
+func (c *K8sCluster) startK8sControllers(kubeConfigPath string, envoyCluster *envoy.EnvoyCluster, resyncPeriod time.Duration) error {
+	c.clientSet, err = newKubeClient(kubeConfigPath, c.Context)
 	if err != nil {
 		return err
 	}
-	watchNamespaces = v1.NamespaceAll
+	watchNamespaces := v1.NamespaceAll
 	//watchNamespaces = "kube-system"
-	c.watchObjects(resyncPeriod, &extbeta1.Ingress{}, envoyCluster)
-	c.watchObjects(resyncPeriod, &v1.Service{}, envoyCluster)
-	c.watchObjects(resyncPeriod, &v1.Secret{}, envoyCluster)
-	c.watchObjects(resyncPeriod, &v1.Node{}, envoyCluster)
+	c.watchObjects(resyncPeriod, &v1beta1.Ingress{}, envoyCluster, watchNamespaces)
+	c.watchObjects(resyncPeriod, &v1.Service{}, envoyCluster, watchNamespaces)
+	c.watchObjects(resyncPeriod, &v1.Secret{}, envoyCluster, watchNamespaces)
+	c.watchObjects(resyncPeriod, &v1.Node{}, envoyCluster, watchNamespaces)
 	return nil
 }
 
-func (c *k8sCluster) addK8sEventHandlers() {
-	c.ingressInformer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
+func (c *K8sCluster) addK8sEventHandlers() {
+	c.ingressInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    c.addedObj,
 		UpdateFunc: c.updatedObj,
 		DeleteFunc: c.deletedObj,
 	})
 
-	c.serviceInformer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
+	c.serviceInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    c.addedObj,
 		UpdateFunc: c.updatedObj,
 		DeleteFunc: c.deletedObj,
 	})
 
-	c.secretInformer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
+	c.secretInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    c.addedObj,
 		UpdateFunc: c.updatedObj,
 		DeleteFunc: c.deletedObj,
 	})
 
-	c.nodeInformer.AddEventHandler(k8scache.ResourceEventHandlerFuncs{
+	c.nodeInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    c.addedObj,
 		DeleteFunc: c.deletedObj,
 	})
 }
 
-func (c *k8sCluster) watchObjects(resyncPeriod time.Duration, objType runtime.Object, envoyCluster *envoy.EnvoyCluster) {
-	var lw *k8scache.ListWatch
-	var informer *k8scache.SharedInformer
-	var cacheStore *k8scache.Store
+func (c *K8sCluster) watchObjects(resyncPeriod time.Duration, objType runtime.Object, envoyCluster *envoy.EnvoyCluster, watchNamespaces string) {
+	var lw *cache.ListWatch
+	var informer *cache.SharedInformer
+	var cacheStore *cache.Store
 	var initialObjects *[]string
 	switch objType.(type) {
-	case *extbeta1.Ingress:
-		lw = k8scache.NewListWatchFromClient(c.clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", watchNamespaces, fields.Everything())
+	case *v1beta1.Ingress:
+		lw = cache.NewListWatchFromClient(c.clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", watchNamespaces, fields.Everything())
 		informer = &c.ingressInformer
-		cacheStore = &envoyCluster.K8sCacheStoreMap[c.name].IngressCacheStore
+		cacheStore = &envoyCluster.K8sCacheStoreMap[c.Context].IngressCacheStore
 		initialObjects = &c.initialIngresses
 	case *v1.Service:
-		lw = k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "services", watchNamespaces, fields.Everything())
+		lw = cache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "services", watchNamespaces, fields.Everything())
 		informer = &c.serviceInformer
-		cacheStore = &envoyCluster.K8sCacheStoreMap[c.name].ServiceCacheStore
+		cacheStore = &envoyCluster.K8sCacheStoreMap[c.Context].ServiceCacheStore
 		initialObjects = &c.initialServices
 	case *v1.Secret:
-		lw = k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "secrets", watchNamespaces, fields.Everything())
+		lw = cache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "secrets", watchNamespaces, fields.Everything())
 		informer = &c.secretInformer
-		cacheStore = &envoyCluster.K8sCacheStoreMap[c.name].SecretCacheStore
+		cacheStore = &envoyCluster.K8sCacheStoreMap[c.Context].SecretCacheStore
 		initialObjects = &c.initialSecrets
 	case *v1.Node:
-		lw = k8scache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
+		lw = cache.NewListWatchFromClient(c.clientSet.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
 		informer = &c.nodeInformer
-		cacheStore = &envoyCluster.K8sCacheStoreMap[c.name].NodeCacheStore
+		cacheStore = &envoyCluster.K8sCacheStoreMap[c.Context].NodeCacheStore
 		initialObjects = &c.initialNodes
 	}
 
-	*informer = k8scache.NewSharedInformer(lw, objType, resyncPeriod)
+	*informer = cache.NewSharedInformer(lw, objType, resyncPeriod)
 	*cacheStore = (*informer).GetStore()
 	go (*informer).Run(wait.NeverStop)
-	log.Infof("waiting to sync ingress for cluster: %v", c.name)
+	log.Infof("waiting to sync ingress for cluster: %v", c.Context)
 	for !(*informer).HasSynced() {
 	}
 	*initialObjects = (*cacheStore).ListKeys()
-	log.Infof("%v %T synced for cluster %v", len((*cacheStore).List()), objType, c.name)
+	log.Infof("%v %T synced for cluster %v", len((*cacheStore).List()), objType, c.Context)
 }
 
-func (c *k8sCluster) addedObj(obj interface{}) {
+func (c *K8sCluster) addedObj(obj interface{}) {
 	var objNamespace string
 	var objName string
 	var initialObjects *[]string
 
 	switch newObj := obj.(type) {
-	case *extbeta1.Ingress:
+	case *v1beta1.Ingress:
 		objNamespace = newObj.Namespace
 		objName = newObj.Name
 		initialObjects = &c.initialIngresses
@@ -197,7 +173,7 @@ func (c *k8sCluster) addedObj(obj interface{}) {
 		objName = newObj.Name
 		initialObjects = &c.initialSecrets
 		if newObj.Data["tls.crt"] == nil || newObj.Data["tls.key"] == nil {
-			log.Infof("skipping envoy updates, as it's not a TLS secret --> %v:%v:%v", c.name, objNamespace, objName)
+			log.Infof("skipping envoy updates, as it's not a TLS secret --> %v:%v:%v", c.Context, objNamespace, objName)
 			return
 		}
 	case *v1.Node:
@@ -207,26 +183,26 @@ func (c *k8sCluster) addedObj(obj interface{}) {
 	}
 
 	for _, key := range *initialObjects {
-		namespace, name, err := k8scache.SplitMetaNamespaceKey(key)
+		namespace, name, err := cache.SplitMetaNamespaceKey(key)
 		if err != nil {
-			log.Fatalf("Error while splitting the metanamespacekey %v in the cluster %v", key, c.name)
+			log.Fatalf("Error while splitting the metanamespacekey %v in the cluster %v", key, c.Context)
 		}
 		if objNamespace == namespace && objName == name {
-			log.Infof("skipping envoy updates, as it's an existing %T --> %v:%v:%v", obj, c.name, objNamespace, objName)
+			log.Infof("skipping envoy updates, as it's an existing %T --> %v:%v:%v", obj, c.Context, objNamespace, objName)
 			return
 		}
 	}
 
-	log.Infof("added k8s %T  --> %v:%v:%v", obj, c.name, objNamespace, objName)
+	log.Infof("added k8s %T  --> %v:%v:%v", obj, c.Context, objNamespace, objName)
 	_envoyCluster.CreateEnvoySnapshot()
 }
 
-func (c *k8sCluster) updatedObj(oldObj interface{}, newObj interface{}) {
+func (c *K8sCluster) updatedObj(oldObj interface{}, newObj interface{}) {
 	var objNamespace string
 	var objName string
 
 	switch updatedObj := oldObj.(type) {
-	case *extbeta1.Ingress:
+	case *v1beta1.Ingress:
 		objNamespace = updatedObj.Namespace
 		objName = updatedObj.Name
 	case *v1.Service:
@@ -236,7 +212,7 @@ func (c *k8sCluster) updatedObj(oldObj interface{}, newObj interface{}) {
 		objNamespace = updatedObj.Namespace
 		objName = updatedObj.Name
 		if updatedObj.Data["tls.crt"] == nil || updatedObj.Data["tls.key"] == nil {
-			log.Infof("skipping envoy updates, as it's not a TLS secret --> %v:%v:%v", c.name, objNamespace, objName)
+			log.Infof("skipping envoy updates, as it's not a TLS secret --> %v:%v:%v", c.Context, objNamespace, objName)
 			return
 		}
 	case *v1.Node:
@@ -245,22 +221,22 @@ func (c *k8sCluster) updatedObj(oldObj interface{}, newObj interface{}) {
 	}
 
 	if cmp.Equal(oldObj, newObj,
-		cmpopts.IgnoreFields(extbeta1.Ingress{}, "Status"),
+		cmpopts.IgnoreFields(v1beta1.Ingress{}, "Status"),
 		cmpopts.IgnoreFields(metav1.ObjectMeta{}, "ResourceVersion")) {
-		log.Infof("skipping envoy updates, as only %T status has changed --> %v:%v:%v", oldObj, c.name, objNamespace, objName)
+		log.Infof("skipping envoy updates, as only %T status has changed --> %v:%v:%v", oldObj, c.Context, objNamespace, objName)
 		return
 	}
-	log.Infof("updated k8s %T --> %v:%v:%v", oldObj, c.name, objNamespace, objName)
+	log.Infof("updated k8s %T --> %v:%v:%v", oldObj, c.Context, objNamespace, objName)
 	_envoyCluster.CreateEnvoySnapshot()
 }
 
-func (c *k8sCluster) deletedObj(obj interface{}) {
+func (c *K8sCluster) deletedObj(obj interface{}) {
 	var objNamespace string
 	var objName string
 	var initialObjects *[]string
 
 	switch delObj := obj.(type) {
-	case *extbeta1.Ingress:
+	case *v1beta1.Ingress:
 		objNamespace = delObj.Namespace
 		objName = delObj.Name
 		initialObjects = &c.initialIngresses
@@ -273,7 +249,7 @@ func (c *k8sCluster) deletedObj(obj interface{}) {
 		objName = delObj.Name
 		initialObjects = &c.initialSecrets
 		if delObj.Data["tls.crt"] == nil || delObj.Data["tls.key"] == nil {
-			log.Infof("skipping envoy updates, as it's not a TLS secret --> %v:%v:%v", c.name, objNamespace, objName)
+			log.Infof("skipping envoy updates, as it's not a TLS secret --> %v:%v:%v", c.Context, objNamespace, objName)
 			return
 		}
 	case *v1.Node:
@@ -282,11 +258,11 @@ func (c *k8sCluster) deletedObj(obj interface{}) {
 		initialObjects = &c.initialNodes
 	}
 
-	log.Infof("deleted k8s %T  --> %v:%v:%v", obj, c.name, objNamespace, objName)
+	log.Infof("deleted k8s %T  --> %v:%v:%v", obj, c.Context, objNamespace, objName)
 	var index int
 	var key string
 	for index, key = range *initialObjects {
-		namespace, name, err := k8scache.SplitMetaNamespaceKey(key)
+		namespace, name, err := cache.SplitMetaNamespaceKey(key)
 		if err != nil {
 			log.Fatal("Error while splittig the metanamespace key")
 		}
@@ -301,10 +277,13 @@ func (c *k8sCluster) deletedObj(obj interface{}) {
 
 // NewKubeClient k8s client.
 func newKubeClient(kubeconfigPath string, context string) (kubernetes.Interface, error) {
-	var config *restclient.Config
+	var config *rest.Config
 	apiConfig, err := clientcmd.LoadFromFile(kubeconfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("error creating kube config from file: %s", err)
+		return nil, fmt.Errorf("error reading kube config from file: %s", err)
+	}
+	if apiConfig.Contexts[context] == nil {
+		log.Fatalf("Context %v is not found in the kube config file %v", context, kubeconfigPath)
 	}
 	authInfo := apiConfig.Contexts[context].AuthInfo
 	token := apiConfig.AuthInfos[authInfo].Token
@@ -312,7 +291,7 @@ func newKubeClient(kubeconfigPath string, context string) (kubernetes.Interface,
 	server := apiConfig.Clusters[cluster].Server
 	config, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath},
-		&clientcmd.ConfigOverrides{AuthInfo: clientcmdapi.AuthInfo{Token: token}, ClusterInfo: clientcmdapi.Cluster{Server: server}}).ClientConfig()
+		&clientcmd.ConfigOverrides{AuthInfo: api.AuthInfo{Token: token}, ClusterInfo: api.Cluster{Server: server}}).ClientConfig()
 	if err != nil {
 		return nil, fmt.Errorf("error creating client config: %s", err)
 	}

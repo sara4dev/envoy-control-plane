@@ -9,7 +9,6 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
 	"log"
-	"strconv"
 )
 
 func (e *EnvoyCluster) makeEnvoyEndpoints(envoyEndpointsChan chan []cache.Resource) {
@@ -111,7 +110,7 @@ func (e *EnvoyCluster) makeEnvoyLbEndpoint(node *v1.Node, servicePort v1.Service
 func (e *EnvoyCluster) makeEnvoyLocalityLbEndpoint(k8sCluster *data.K8sCacheStore, lbEndpoints []endpoint.LbEndpoint) endpoint.LocalityLbEndpoints {
 	return endpoint.LocalityLbEndpoints{
 		Locality: &core.Locality{
-			Zone: strconv.Itoa(int(k8sCluster.Zone)),
+			Zone: k8sCluster.Zone,
 		},
 		Priority:    k8sCluster.Priority,
 		LbEndpoints: lbEndpoints,

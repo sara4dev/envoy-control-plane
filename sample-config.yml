@@ -1,0 +1,7 @@
+kubeConfigPath: "/Users/z0027kp/.kube/config"
+zone: "tte"
+clusters:
+  - context: "tgt-tte-bigoli-test"
+    zone: "tte"
+  - context: "tgt-ttc-bigoli-test"
+    zone: "ttc"

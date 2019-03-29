@@ -38,13 +38,13 @@ func setupEnvoyTest() {
 	testEnvoyCluster.K8sCacheStoreMap = make(map[string]*data.K8sCacheStore)
 	testEnvoyCluster.K8sCacheStoreMap["cluster1"] = &data.K8sCacheStore{
 		Name:     "cluster1",
-		Zone:     data.TTC,
+		Zone:     "zone1",
 		Priority: 0,
 	}
 
 	testEnvoyCluster.K8sCacheStoreMap["cluster2"] = &data.K8sCacheStore{
 		Name:     "cluster2",
-		Zone:     data.TTE,
+		Zone:     "zone2",
 		Priority: 1,
 	}
 

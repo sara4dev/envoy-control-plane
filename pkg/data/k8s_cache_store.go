@@ -1,21 +1,13 @@
 package data
 
-import k8scache "k8s.io/client-go/tools/cache"
+import "k8s.io/client-go/tools/cache"
 
 type K8sCacheStore struct {
 	Name              string
-	Zone              Zone
+	Zone              string
 	Priority          uint32
-	IngressCacheStore k8scache.Store
-	ServiceCacheStore k8scache.Store
-	SecretCacheStore  k8scache.Store
-	NodeCacheStore    k8scache.Store
+	IngressCacheStore cache.Store
+	ServiceCacheStore cache.Store
+	SecretCacheStore  cache.Store
+	NodeCacheStore    cache.Store
 }
-
-type Zone int
-
-//TODO remove hardcoded zone
-const (
-	TTC Zone = 0
-	TTE Zone = 1
-)
