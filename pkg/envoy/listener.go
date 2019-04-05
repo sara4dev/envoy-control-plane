@@ -175,8 +175,15 @@ func (e *EnvoyCluster) makeEnvoyHttpsListerners(envoyHttpsListenersChan chan []c
 }
 
 func makeConnectionManager(virtualHosts []route.VirtualHost, statPrefix string) *hcm.HttpConnectionManager {
+	//jsonFormat := make(map[string]*types.Value)
+	//jsonFormat["protocol"] = &types.Value{ Kind:&types.Value_StringValue{StringValue: "%PROTOCOL%"}}
 	accessLogConfig, err := types.MarshalAny(&al.FileAccessLog{
 		Path: "/dev/stdout",
+		//AccessLogFormat: &al.FileAccessLog_JsonFormat{
+		//	JsonFormat: &types.Struct{
+		//		Fields: jsonFormat,
+		//	},
+		//},
 	})
 	if err != nil {
 		log.Fatalf("failed to convert: %s", err)
