@@ -31,3 +31,8 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+autoscaler:
+  maxReplicas: 10
+  minReplicas: 3
+  targetCPUUtilizationPercentage: 75
