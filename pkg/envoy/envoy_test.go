@@ -35,6 +35,7 @@ var testEnvoyCluster EnvoyCluster
 func setupEnvoyTest() {
 
 	testEnvoyCluster = EnvoyCluster{}
+	testEnvoyCluster.DefaultTlsSecret = "kube-system/haproxy-ingress-np-tls-secret"
 	testEnvoyCluster.K8sCacheStoreMap = make(map[string]*data.K8sCacheStore)
 	testEnvoyCluster.K8sCacheStoreMap["cluster1"] = &data.K8sCacheStore{
 		Name:     "cluster1",

@@ -53,6 +53,7 @@ func setupK8sTest() {
 		},
 	}
 	_envoyCluster = &envoy.EnvoyCluster{
+		DefaultTlsSecret:   "kube-system/haproxy-ingress-np-tls-secret",
 		EnvoySnapshotCache: &fakeSnapshotCache{},
 	}
 	_envoyCluster.K8sCacheStoreMap = make(map[string]*data.K8sCacheStore)
