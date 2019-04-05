@@ -242,6 +242,9 @@ func makeVirtualHost(k8sCluster *data.K8sCacheStore, namespace string, ingressRu
 }
 
 func makeRoute(httpPath v1beta1.HTTPIngressPath, namespace string, ingressRule v1beta1.IngressRule) route.Route {
+	perTryTimeout := time.Second * 20
+	numRetries := types.UInt32Value{Value: 1}
+
 	return route.Route{
 		Match: route.RouteMatch{
 			PathSpecifier: &route.RouteMatch_Prefix{
@@ -250,15 +253,14 @@ func makeRoute(httpPath v1beta1.HTTPIngressPath, namespace string, ingressRule v
 		},
 		Action: &route.Route_Route{
 			Route: &route.RouteAction{
-				//TODO Add retry?
-				//Timeout: &vhost.Timeout,
 				ClusterSpecifier: &route.RouteAction_Cluster{
 					Cluster: getClusterName(namespace, ingressRule.Host, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal),
 				},
-				//RetryPolicy: &route.RetryPolicy {
-				//	RetryOn:       "5xx",
-				//	PerTryTimeout: time.Second * 20,
-				//},
+				RetryPolicy: &route.RetryPolicy{
+					RetryOn:       "5xx",
+					NumRetries:    &numRetries,
+					PerTryTimeout: &perTryTimeout,
+				},
 			},
 		},
 	}
