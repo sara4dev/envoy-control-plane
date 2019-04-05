@@ -6,9 +6,9 @@ import (
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/endpoint"
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
+	log "github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
-	"log"
 )
 
 func (e *EnvoyCluster) makeEnvoyEndpoints(envoyEndpointsChan chan []cache.Resource) {
@@ -43,11 +43,11 @@ func (e *EnvoyCluster) makeEnvoyEndpoints(envoyEndpointsChan chan []cache.Resour
 			localityLbEndpoint := endpoint.LocalityLbEndpoints{}
 			serviceObj, serviceExists, err := k8sCluster.ServiceCacheStore.GetByKey(k8sService.namespace + "/" + k8sService.name)
 			if err != nil {
-				log.Fatal("Error in getting service by name")
+				log.Fatalf("Error in getting the service %v-%v by name", k8sService.namespace, k8sService.name)
 			}
 			_, ingressExists, err := k8sCluster.IngressCacheStore.GetByKey(k8sService.namespace + "/" + k8sService.ingressName)
 			if err != nil {
-				log.Fatal("Error in getting ingress by name")
+				log.Fatalf("Error in getting the ingress %v-%v by name", k8sService.namespace, k8sService.ingressName)
 			}
 			if serviceExists && ingressExists {
 				service := serviceObj.(*v1.Service)
