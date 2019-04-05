@@ -41,9 +41,10 @@ type K8sCluster struct {
 
 var err error
 
-func RunK8sControllers(envoyCluster *envoy.EnvoyCluster, k8sClusters []*K8sCluster, zone string, kubeConfigPath string, resyncPeriod time.Duration) {
+func RunK8sControllers(envoyCluster *envoy.EnvoyCluster, kubeConfigPath string, defaultTlsSecret string, zone string, k8sClusters []*K8sCluster, resyncPeriod time.Duration) {
 	_envoyCluster = envoyCluster
 	envoyCluster.K8sCacheStoreMap = make(map[string]*data.K8sCacheStore)
+	envoyCluster.DefaultTlsSecret = defaultTlsSecret
 
 	for _, k8sCluster := range k8sClusters {
 		k8sCluster.setClusterPriority(zone)
@@ -173,7 +174,7 @@ func (c *K8sCluster) addedObj(obj interface{}) {
 		objName = newObj.Name
 		initialObjects = &c.initialSecrets
 		if newObj.Data["tls.crt"] == nil || newObj.Data["tls.key"] == nil {
-			log.Infof("skipping envoy updates, as it's not a TLS secret --> %v:%v:%v", c.Context, objNamespace, objName)
+			log.Debugf("skipping envoy updates, as it's not a TLS secret --> %v:%v:%v", c.Context, objNamespace, objName)
 			return
 		}
 	case *v1.Node:
@@ -188,7 +189,7 @@ func (c *K8sCluster) addedObj(obj interface{}) {
 			log.Fatalf("Error while splitting the metanamespacekey %v in the cluster %v", key, c.Context)
 		}
 		if objNamespace == namespace && objName == name {
-			log.Infof("skipping envoy updates, as it's an existing %T --> %v:%v:%v", obj, c.Context, objNamespace, objName)
+			log.Debugf("skipping envoy updates, as it's an existing %T --> %v:%v:%v", obj, c.Context, objNamespace, objName)
 			return
 		}
 	}
@@ -218,7 +219,7 @@ func (c *K8sCluster) updatedObj(oldObj interface{}, newObj interface{}) {
 		objNamespace = updatedObj.Namespace
 		objName = updatedObj.Name
 		if updatedObj.Data["tls.crt"] == nil || updatedObj.Data["tls.key"] == nil {
-			log.Infof("skipping envoy updates, as it's not a TLS secret --> %v:%v:%v", c.Context, objNamespace, objName)
+			log.Debugf("skipping envoy updates, as it's not a TLS secret --> %v:%v:%v", c.Context, objNamespace, objName)
 			return
 		}
 	case *v1.Node:
@@ -229,7 +230,7 @@ func (c *K8sCluster) updatedObj(oldObj interface{}, newObj interface{}) {
 	if cmp.Equal(oldObj, newObj,
 		cmpopts.IgnoreFields(v1beta1.Ingress{}, "Status"),
 		cmpopts.IgnoreFields(metav1.ObjectMeta{}, "ResourceVersion")) {
-		log.Infof("skipping envoy updates, as only %T status has changed --> %v:%v:%v", oldObj, c.Context, objNamespace, objName)
+		log.Debugf("skipping envoy updates, as only %T status has changed --> %v:%v:%v", oldObj, c.Context, objNamespace, objName)
 		return
 	}
 	log.Infof("updated k8s %T --> %v:%v:%v", oldObj, c.Context, objNamespace, objName)
@@ -255,7 +256,7 @@ func (c *K8sCluster) deletedObj(obj interface{}) {
 		objName = delObj.Name
 		initialObjects = &c.initialSecrets
 		if delObj.Data["tls.crt"] == nil || delObj.Data["tls.key"] == nil {
-			log.Infof("skipping envoy updates, as it's not a TLS secret --> %v:%v:%v", c.Context, objNamespace, objName)
+			log.Debugf("skipping envoy updates, as it's not a TLS secret --> %v:%v:%v", c.Context, objNamespace, objName)
 			return
 		}
 	case *v1.Node:

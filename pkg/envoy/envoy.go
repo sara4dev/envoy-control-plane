@@ -23,6 +23,7 @@ type EnvoyCluster struct {
 	Version            int32
 	tlsDataCache       sync.Map
 	K8sCacheStoreMap   map[string]*data.K8sCacheStore
+	DefaultTlsSecret   string
 }
 
 type k8sService struct {
@@ -139,8 +140,9 @@ func (e *EnvoyCluster) RunManagementServer(ctx context.Context, port uint) {
 
 func (e *EnvoyCluster) CreateEnvoySnapshot() {
 	atomic.AddInt32(&e.Version, 1)
+	//TODO Get the nodeID dynamically
 	//nodeId := EnvoySnapshotCache.GetStatusKeys()[0]
-	log.Infof(">>>>>>>>>>>>>>>>>>> creating snapshot Version " + fmt.Sprint(e.Version))
+	log.Infof(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> creating snapshot Version " + fmt.Sprint(e.Version))
 
 	envoyListenersChan := make(chan []cache.Resource)
 	envoyClustersChan := make(chan []cache.Resource)
@@ -156,10 +158,11 @@ func (e *EnvoyCluster) CreateEnvoySnapshot() {
 
 	snap := cache.NewSnapshot(fmt.Sprint(e.Version), envoyEndpoints, envoyClusters, nil, envoyListeners)
 
+	//TODO Get the nodeID dynamically
 	e.EnvoySnapshotCache.SetSnapshot("k8s_ingress", snap)
+	log.Infof(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> created snapshot Version " + fmt.Sprint(e.Version))
 }
 
 func getClusterName(k8sNamespace string, k8singressHost string, k8sServiceName string, k8sServicePort int32) string {
 	return k8sNamespace + ":" + k8singressHost + ":" + k8sServiceName + ":" + fmt.Sprint(k8sServicePort)
-	//return k8sNamespace + ":" + k8sServiceName + ":" + fmt.Sprint(k8sServicePort)
 }

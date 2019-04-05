@@ -15,6 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
+	"strings"
 	"time"
 )
 
@@ -37,7 +38,7 @@ func (e *EnvoyCluster) makeEnvoyListeners(envoyListenersChan chan []cache.Resour
 	envoyListenersChan <- envoyListeners
 
 	elapsed := time.Since(start)
-	log.Printf("makeEnvoyListeners took %s", elapsed)
+	log.Debugf("makeEnvoyListeners took %v", elapsed)
 }
 
 func (e *EnvoyCluster) makeEnvoyHttpListerners(envoyHttpListenersChan chan []cache.Resource) {
@@ -223,7 +224,6 @@ func makeVirtualHost(k8sCluster *data.K8sCacheStore, namespace string, ingressRu
 	routes := []route.Route{}
 
 	for _, httpPath := range ingressRule.HTTP.Paths {
-		//log.Info("k8sCluster: " + strconv.Itoa(k8sCluster))
 		service := findService(k8sCluster, namespace, httpPath.Backend.ServiceName)
 		if service != nil {
 			if service.Spec.Type == v1.ServiceTypeNodePort {
@@ -265,6 +265,7 @@ func makeRoute(httpPath v1beta1.HTTPIngressPath, namespace string, ingressRule v
 }
 
 func (e *EnvoyCluster) getTLS(k8sCluster *data.K8sCacheStore, namespace string, tlsSecretName string) *auth.DownstreamTlsContext {
+	defaultTLSSecretNamespace, defaultTLSSecretName := e.getDefaultTLSSecret()
 	tls := &auth.DownstreamTlsContext{}
 	tls.CommonTlsContext = &auth.CommonTlsContext{
 		TlsCertificates: []*auth.TlsCertificate{},
@@ -273,14 +274,14 @@ func (e *EnvoyCluster) getTLS(k8sCluster *data.K8sCacheStore, namespace string, 
 	if tlsSecretName != "" {
 		tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{e.getTLSData(k8sCluster, namespace, tlsSecretName)}
 	} else {
-		//TODO remove hard coding of default TLS
-		tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{e.getTLSData(k8sCluster, "kube-system", "haproxy-ingress-np-tls-secret")}
+		tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{e.getTLSData(k8sCluster, defaultTLSSecretNamespace, defaultTLSSecretName)}
 	}
 
 	return tls
 }
 
 func (e *EnvoyCluster) getTLSData(k8sCluster *data.K8sCacheStore, namespace string, tlsSecretName string) *auth.TlsCertificate {
+	defaultTLSSecretNamespace, defaultTLSSecretName := e.getDefaultTLSSecret()
 	key := k8sCluster.Name + "--" + namespace + "--" + tlsSecretName
 	tlsCertificate := auth.TlsCertificate{}
 	value, ok := e.tlsDataCache.Load(key)
@@ -290,8 +291,7 @@ func (e *EnvoyCluster) getTLSData(k8sCluster *data.K8sCacheStore, namespace stri
 		defaultTLS, exists, err := k8sCluster.SecretCacheStore.GetByKey(namespace + "/" + tlsSecretName)
 		if err != nil {
 			log.Warn("Error in finding TLS secrets:" + namespace + "-" + tlsSecretName + ", using the default certs")
-			//TODO remove hard coding of default TLS
-			return e.getTLSData(k8sCluster, "kube-system", "haproxy-ingress-np-tls-secret")
+			return e.getTLSData(k8sCluster, defaultTLSSecretNamespace, defaultTLSSecretName)
 		}
 		if exists {
 			defaultTLSSecret := defaultTLS.(*v1.Secret)
@@ -301,8 +301,7 @@ func (e *EnvoyCluster) getTLSData(k8sCluster *data.K8sCacheStore, namespace stri
 			_, err = tls.X509KeyPair(certPem, keyPem)
 			if err != nil {
 				log.Warn("Bad certificate in " + namespace + "-" + tlsSecretName + ", using the default certs")
-				//TODO remove hard coding of default TLS
-				return e.getTLSData(k8sCluster, "kube-system", "haproxy-ingress-np-tls-secret")
+				return e.getTLSData(k8sCluster, defaultTLSSecretNamespace, defaultTLSSecretName)
 			}
 
 			tlsCertificate = auth.TlsCertificate{
@@ -323,4 +322,9 @@ func (e *EnvoyCluster) getTLSData(k8sCluster *data.K8sCacheStore, namespace stri
 		}
 	}
 	return &tlsCertificate
+}
+
+func (e *EnvoyCluster) getDefaultTLSSecret() (namespace string, name string) {
+	namespacedName := strings.Split(e.DefaultTlsSecret, "/")
+	return namespacedName[0], namespacedName[1]
 }

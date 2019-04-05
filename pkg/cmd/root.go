@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"git.target.com/Kubernetes/envoy-control-plane/pkg/envoy"
 	"git.target.com/Kubernetes/envoy-control-plane/pkg/k8s"
+	"git.target.com/Kubernetes/envoy-control-plane/pkg/logger"
 	"github.com/mitchellh/go-homedir"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -61,6 +62,7 @@ func Execute() {
 }
 
 func run(cmd *cobra.Command, args []string) {
+	logger.LogSetup(viper.GetString("logLevel"))
 	runtime.GOMAXPROCS(2)
 	log.Info("started...")
 	var k8sClusters []*k8s.K8sCluster
@@ -70,10 +72,10 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	envoyCluster := envoy.NewEnvoyCluster()
-	//resync with kubernetes every 30 minutes in case if cache went out of sync
-	resyncPeriod := time.Minute * 30
+	//resync with kubernetes every 60 minutes in case if cache went out of sync
+	resyncPeriod := time.Hour * 8
 	//Start watching for K8s cluster objects
-	k8s.RunK8sControllers(envoyCluster, k8sClusters, viper.GetString("zone"), viper.GetString("kubeConfigPath"), resyncPeriod)
+	k8s.RunK8sControllers(envoyCluster, viper.GetString("kubeConfigPath"), viper.GetString("defaultTlsSecret"), viper.GetString("zone"), k8sClusters, resyncPeriod)
 	//Start the gRPC api server for envoy control plane
 	envoyCluster.RunManagementServer(context.Background(), 8080)
 }
