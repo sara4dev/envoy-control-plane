@@ -28,7 +28,7 @@ require (
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/viper v1.3.2
 	github.com/stretchr/testify v1.3.0 // indirect
-	github.com/urfave/cli v1.20.0
+	github.com/urfave/cli v1.20.0 // indirect
 	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2 // indirect
 	golang.org/x/net v0.0.0-20190311031020-56fb01167e7d
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421 // indirect
