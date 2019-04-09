@@ -4,29 +4,29 @@ metadata: {}
 resourceVersion: ""
 selfLink: ""
 items:
-  - apiVersion: v1
-    kind: Service
-    metadata:
-      name: service1
-      namespace: namespace1
-    spec:
-      ports:
-        - port: 8080
-          protocol: TCP
-      selector:
-        app: app1
-      sessionAffinity: None
-      type: NodePort
-  - apiVersion: v1
-    kind: Service
-    metadata:
-      name: service2
-      namespace: namespace2
-    spec:
-      ports:
-        - port: 8080
-          protocol: TCP
-      selector:
-        app: app2
-      sessionAffinity: None
-      type: NodePort
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: service1
+    namespace: namespace1
+  spec:
+    ports:
+      - port: 8080
+        protocol: TCP
+    selector:
+      app: app1
+    sessionAffinity: None
+    type: NodePort
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: service2
+    namespace: namespace2
+  spec:
+    ports:
+      - port: 8080
+        protocol: TCP
+    selector:
+      app: app2
+    sessionAffinity: None
+    type: NodePort

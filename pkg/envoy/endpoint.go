@@ -29,6 +29,7 @@ func (e *EnvoyCluster) makeEnvoyEndpoints(envoyEndpointsChan chan []cache.Resour
 						name:        httpPath.Backend.ServiceName,
 						ingressName: ingress.Name,
 						namespace:   ingress.Namespace,
+						ingressHost: ingressRule.Host,
 						port:        httpPath.Backend.ServicePort.IntVal,
 					}
 					clusterMap[clusterName] = k8sService
@@ -39,19 +40,20 @@ func (e *EnvoyCluster) makeEnvoyEndpoints(envoyEndpointsChan chan []cache.Resour
 
 	for _, k8sCluster := range e.K8sCacheStoreMap {
 		for clusterName, k8sService := range clusterMap {
-			lbEndpoints := []endpoint.LbEndpoint{}
-			localityLbEndpoint := endpoint.LocalityLbEndpoints{}
 			serviceObj, serviceExists, err := k8sCluster.ServiceCacheStore.GetByKey(k8sService.namespace + "/" + k8sService.name)
 			if err != nil {
 				log.Fatalf("Error in getting the service %v-%v by name", k8sService.namespace, k8sService.name)
 			}
-			_, ingressExists, err := k8sCluster.IngressCacheStore.GetByKey(k8sService.namespace + "/" + k8sService.ingressName)
+			ingressObj, ingressExists, err := k8sCluster.IngressCacheStore.GetByKey(k8sService.namespace + "/" + k8sService.ingressName)
 			if err != nil {
 				log.Fatalf("Error in getting the ingress %v-%v by name", k8sService.namespace, k8sService.ingressName)
 			}
 			if serviceExists && ingressExists {
+				ingress := ingressObj.(*v1beta1.Ingress)
 				service := serviceObj.(*v1.Service)
-				if service.Spec.Type == v1.ServiceTypeNodePort {
+				if service.Spec.Type == v1.ServiceTypeNodePort && isIngressForEnvoyCluster(ingress, k8sService.ingressHost) {
+					lbEndpoints := []endpoint.LbEndpoint{}
+					localityLbEndpoint := endpoint.LocalityLbEndpoints{}
 					for _, servicePort := range service.Spec.Ports {
 						for _, nodeObj := range k8sCluster.NodeCacheStore.List() {
 							node := nodeObj.(*v1.Node)
@@ -59,10 +61,9 @@ func (e *EnvoyCluster) makeEnvoyEndpoints(envoyEndpointsChan chan []cache.Resour
 							lbEndpoints = append(lbEndpoints, lbEndpoint)
 						}
 					}
+					localityLbEndpoint = e.makeEnvoyLocalityLbEndpoint(k8sCluster, lbEndpoints)
+					localityLbEndpointsMap[clusterName] = append(localityLbEndpointsMap[clusterName], localityLbEndpoint)
 				}
-
-				localityLbEndpoint = e.makeEnvoyLocalityLbEndpoint(k8sCluster, lbEndpoints)
-				localityLbEndpointsMap[clusterName] = append(localityLbEndpointsMap[clusterName], localityLbEndpoint)
 			}
 		}
 	}
@@ -115,4 +116,13 @@ func (e *EnvoyCluster) makeEnvoyLocalityLbEndpoint(k8sCluster *data.K8sCacheStor
 		Priority:    k8sCluster.Priority,
 		LbEndpoints: lbEndpoints,
 	}
+}
+
+func isIngressForEnvoyCluster(ingress *v1beta1.Ingress, host string) bool {
+	for _, rule := range ingress.Spec.Rules {
+		if rule.Host == host {
+			return true
+		}
+	}
+	return false
 }

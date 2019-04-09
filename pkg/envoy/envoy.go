@@ -30,6 +30,7 @@ type k8sService struct {
 	name        string
 	ingressName string
 	namespace   string
+	ingressHost string
 	port        int32
 }
 
