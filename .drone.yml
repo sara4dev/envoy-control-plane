@@ -110,16 +110,16 @@ pipeline:
       - "latest"
       - "${DRONE_TAG}"
 
-  bubble-bath:
-    image: docker.target.com/bubble-bath/drone-bubblebath:2
-    registry_url: https://docker.target.com
-    repo: kubernetes/envoy-control-plane
-    comparator: semantic-versioning
-    keep: 4
-    registry_username: svkubernetes
-    secrets:
-      - source: svkubernetes
-        target: REGISTRY_PASSWORD
+#  bubble-bath:
+#    image: docker.target.com/bubble-bath/drone-bubblebath:2
+#    registry_url: https://docker.target.com
+#    repo: kubernetes/envoy-control-plane
+#    comparator: semantic-versioning
+#    keep: 4
+#    registry_username: svkubernetes
+#    secrets:
+#      - source: svkubernetes
+#        target: REGISTRY_PASSWORD
 
   validate-chart:
     image: alpine/helm
