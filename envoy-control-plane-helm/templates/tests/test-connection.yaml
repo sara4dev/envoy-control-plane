@@ -14,5 +14,5 @@ spec:
     - name: wget
       image: busybox
       command: ['wget']
-      args:  ['{{ include "envoy-control-plane-helm.fullname" . }}:{{ .Values.service.port }}']
+      args:  ['{{ include "envoy-control-plane-helm.fullname" . }}:8080']
   restartPolicy: Never
