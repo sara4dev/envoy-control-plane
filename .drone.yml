@@ -55,6 +55,7 @@ pipeline:
     image: plugins/docker
     registry: docker.target.com/kubernetes
     repo: docker.target.com/kubernetes/envoy-control-plane
+    dockerfile: Dockerfile
     username: svkubernetes
     secrets:
       - source: svkubernetes
@@ -85,6 +86,7 @@ pipeline:
     image: plugins/docker
     registry: docker.target.com/kubernetes
     repo: docker.target.com/kubernetes/envoy-control-plane
+    dockerfile: Dockerfile
     username: svkubernetes
     secrets:
       - source: svkubernetes
