@@ -1,0 +1,60 @@
+admin:
+  access_log_path: /tmp/admin_access.log
+  address:
+    socket_address: { address: 0.0.0.0, port_value: 9901 }
+tracing:
+  http:
+    name: envoy.zipkin
+    config:
+      collector_cluster: zipkin_cluster
+      collector_endpoint: /api/v1/spans
+dynamic_resources:
+  lds_config:
+    api_config_source:
+      api_type: GRPC
+      refresh_delay: 30s
+      grpc_services:
+        envoy_grpc:
+          cluster_name: xds_cluster
+  cds_config:
+    api_config_source:
+      api_type: GRPC
+      refresh_delay: 30s
+      grpc_services:
+        envoy_grpc:
+          cluster_name: xds_cluster
+node:
+  cluster: k8s_ingress
+  id: k8s_ingress
+static_resources:
+  clusters:
+  - name: xds_cluster
+    type: strict_dns
+    connect_timeout: 10s
+    hosts:
+    - socket_address:
+        address: localhost
+        port_value: 8080
+    http2_protocol_options: { hpack_table_size: 4294967, max_concurrent_streams: 2147483647 }
+    per_connection_buffer_limit_bytes: 100000000
+    max_requests_per_connection: 10000
+    circuit_breakers:
+      thresholds:
+        max_connections: 4096
+        max_requests: 4096
+        max_pending_requests: 6000
+  - name: zipkin_cluster
+    type: strict_dns
+    connect_timeout: 10s
+    hosts:
+    - socket_address:
+        address: zipkin
+        port_value: 9411
+    http2_protocol_options: { hpack_table_size: 4294967, max_concurrent_streams: 2147483647 }
+    per_connection_buffer_limit_bytes: 100000000
+    max_requests_per_connection: 10000
+    circuit_breakers:
+      thresholds:
+        max_connections: 4096
+        max_requests: 4096
+        max_pending_requests: 6000

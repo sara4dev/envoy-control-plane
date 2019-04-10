@@ -48,7 +48,7 @@ pipeline:
     tag:
       - "pr"
 
-  build-docker-test:
+  build-envoy-control-plane-docker-test:
     when:
       branch: master
       event: push
@@ -63,12 +63,43 @@ pipeline:
       - "test"
       - "0.0.${DRONE_BUILD_NUMBER}"
 
-  build-docker-tag:
+  build-envoyproxy-docker-test:
+    when:
+      branch: master
+      event: push
+    image: plugins/docker
+    registry: docker.target.com/kubernetes
+    repo: docker.target.com/kubernetes/envoyproxy
+    dockerfile: envoyproxy/Dockerfile
+    username: svkubernetes
+    secrets:
+      - source: svkubernetes
+        target: plugin_password
+    tag:
+      - "test"
+      - "0.0.${DRONE_BUILD_NUMBER}"
+
+  build-envoy-control-plane-docker-tag:
     when:
       event: tag
     image: plugins/docker
     registry: docker.target.com/kubernetes
     repo: docker.target.com/kubernetes/envoy-control-plane
+    username: svkubernetes
+    secrets:
+      - source: svkubernetes
+        target: plugin_password
+    tag:
+      - "latest"
+      - "${DRONE_TAG}"
+
+  build-envoyproxy-docker-tag:
+    when:
+      event: tag
+    image: plugins/docker
+    registry: docker.target.com/kubernetes
+    repo: docker.target.com/kubernetes/envoyproxy
+    dockerfile: envoyproxy/Dockerfile
     username: svkubernetes
     secrets:
       - source: svkubernetes

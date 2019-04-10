@@ -20,9 +20,13 @@ spec:
         app.kubernetes.io/name: {{ include "envoy-control-plane-helm.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      priorityClassName: system-node-critical
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
-        - name: {{ .Chart.Name }}
-          image: "{{ .Values.image }}:{{ .Chart.Version }}"
+        - name: control-plane
+          image: "{{ .Values.controlPlane.image }}:{{ .Chart.Version }}"
+          imagePullPolicy: {{ .Values.controlPlane.pullPolicy }}
           command:
             - /envoy-control-plane
             {{- range .Values.args }}
@@ -33,12 +37,39 @@ spec:
               containerPort: 8080
               protocol: TCP
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml .Values.controlPlane.resources | nindent 12 }}
           volumeMounts:
           - name: kubeconfig
             mountPath: "/etc/kube"
           - name: config
             mountPath: "/etc/envoy-control-plane"
+        - name: envoyproxy
+          image: "{{ .Values.envoyproxy.image }}:{{ .Chart.Version }}"
+          imagePullPolicy: {{ .Values.envoyproxy.pullPolicy }}
+          command: ["/usr/local/bin/envoy"]
+          args:
+            - --max-obj-name-len 300
+            - --config-path /etc/envoy/envoy.yaml
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+            - name: admin
+              containerPort: 9901
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: admin
+          readinessProbe:
+            httpGet:
+              path: /
+              port: admin
+          resources:
+            {{- toYaml .Values.envoyproxy.resources | nindent 12 }}
       volumes:
       - name: kubeconfig
         secret:
