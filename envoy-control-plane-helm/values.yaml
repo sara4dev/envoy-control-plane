@@ -24,10 +24,10 @@ envoyproxy:
 
 kubeconfig:
   content: |
-    xxx
+    dGVzdAo=
 config:
   content: |
-    xxx
+    dGVzdAo=
 
 args: []
 
