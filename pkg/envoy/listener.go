@@ -53,7 +53,7 @@ func (e *EnvoyCluster) makeEnvoyHttpListerners(envoyHttpListenersChan chan []cac
 			// add it to HTTP listener only if ingress has no TLS
 			if len(ingress.Spec.TLS) == 0 {
 				for _, ingressRule := range ingress.Spec.Rules {
-					virtualHost := makeVirtualHost(k8sCluster, ingress.Namespace, ingressRule)
+					virtualHost := makeVirtualHost(k8sCluster, ingress.Namespace, ingressRule, "80")
 					existingVirtualHost := virtualHostsMap[ingressRule.Host]
 					if existingVirtualHost.Name != "" {
 						existingVirtualHost.Routes = append(existingVirtualHost.Routes, virtualHost.Routes...)
@@ -131,7 +131,7 @@ func (e *EnvoyCluster) makeEnvoyHttpsListerners(envoyHttpsListenersChan chan []c
 				for _, ingressRule := range ingress.Spec.Rules {
 
 					virtualHosts := []route.VirtualHost{
-						makeVirtualHost(k8sCluster, ingress.Namespace, ingressRule),
+						makeVirtualHost(k8sCluster, ingress.Namespace, ingressRule, "443"),
 					}
 					httpConnectionManager := makeConnectionManager(virtualHosts, "ingress_https")
 					httpConfig, err := types.MarshalAny(httpConnectionManager)
@@ -229,7 +229,7 @@ func findService(k8sCluster *data.K8sCacheStore, namespace string, serviceName s
 	return nil
 }
 
-func makeVirtualHost(k8sCluster *data.K8sCacheStore, namespace string, ingressRule v1beta1.IngressRule) route.VirtualHost {
+func makeVirtualHost(k8sCluster *data.K8sCacheStore, namespace string, ingressRule v1beta1.IngressRule, portNumber string) route.VirtualHost {
 
 	routes := []route.Route{}
 
@@ -245,7 +245,7 @@ func makeVirtualHost(k8sCluster *data.K8sCacheStore, namespace string, ingressRu
 
 	virtualHost := route.VirtualHost{
 		Name:    "local_service",
-		Domains: []string{ingressRule.Host},
+		Domains: []string{ingressRule.Host, ingressRule.Host + ":" + portNumber},
 		Routes:  routes,
 	}
 	return virtualHost
