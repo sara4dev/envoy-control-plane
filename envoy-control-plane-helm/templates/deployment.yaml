@@ -70,7 +70,20 @@ spec:
               port: admin
           resources:
             {{- toYaml .Values.envoyproxy.resources | nindent 12 }}
+          volumeMounts:
+          - name: log
+            mountPath: /var/log
+        - name: fluentd
+          image: "{{ .Values.fluentd.image }}:{{ .Chart.Version }}"
+          imagePullPolicy: {{ .Values.fluentd.pullPolicy }}
+          resources:
+                {{- toYaml .Values.fluentd.resources | nindent 12 }}
+          volumeMounts:
+            - name: log
+              mountPath: /var/log
       volumes:
+      - name: log
+        emptyDir: {}
       - name: kubeconfig
         secret:
           secretName: {{ include "envoy-control-plane-helm.fullname" . }}-kubeconfig
