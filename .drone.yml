@@ -26,22 +26,6 @@ pipeline:
   #   filename: deps.tgz
   #   restore: true
 
-  build-fluentd-docker:
-    when:
-      branch: master
-      event: push
-    image: plugins/docker
-    registry: docker.target.com/kubernetes
-    repo: docker.target.com/kubernetes/envoyproxy-fluentd
-    dockerfile: fluentd/Dockerfile
-    username: svkubernetes
-    secrets:
-      - source: svkubernetes
-        target: plugin_password
-    tag:
-      - "test"
-      - "0.0.${DRONE_BUILD_NUMBER}"
-
   build-go:
     image: golang:1.11-alpine3.8
     commands:
@@ -78,6 +62,22 @@ pipeline:
     registry: docker.target.com/kubernetes
     repo: docker.target.com/kubernetes/envoyproxy
     dockerfile: envoyproxy/Dockerfile
+    username: svkubernetes
+    secrets:
+      - source: svkubernetes
+        target: plugin_password
+    tag:
+      - "test"
+      - "0.0.${DRONE_BUILD_NUMBER}"
+
+  build-fluentd-docker:
+    when:
+      branch: master
+      event: push
+    image: plugins/docker
+    registry: docker.target.com/kubernetes
+    repo: docker.target.com/kubernetes/envoyproxy-fluentd
+    dockerfile: fluentd/Dockerfile
     username: svkubernetes
     secrets:
       - source: svkubernetes
