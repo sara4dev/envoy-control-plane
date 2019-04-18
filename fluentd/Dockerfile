@@ -1,2 +1,2 @@
-FROM fluent/fluentd:v1.4-debian-onbuild
+FROM fluent/fluentd
 COPY fluentd/fluent.conf /fluentd/etc/fluent.conf
