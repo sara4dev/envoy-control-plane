@@ -10,6 +10,7 @@ import (
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/route"
 	al "github.com/envoyproxy/go-control-plane/envoy/config/accesslog/v2"
 	fal "github.com/envoyproxy/go-control-plane/envoy/config/filter/accesslog/v2"
+	buf "github.com/envoyproxy/go-control-plane/envoy/config/filter/http/buffer/v2"
 	hcm "github.com/envoyproxy/go-control-plane/envoy/config/filter/network/http_connection_manager/v2"
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
 	"github.com/envoyproxy/go-control-plane/pkg/util"
@@ -185,15 +186,34 @@ func makeConnectionManager(virtualHosts []route.VirtualHost, statPrefix string) 
 		//	},
 		//},
 	})
+
 	if err != nil {
 		log.Fatalf("failed to convert: %s", err)
 	}
+
+	httpBuffer, err := types.MarshalAny(&buf.Buffer{
+		MaxRequestBytes: &types.UInt32Value{Value: 1024 * 1024 * 1024},
+	})
+
+	if err != nil {
+		log.Fatalf("failed to convert: %s", err)
+	}
+	requestTimeout := 5 * time.Minute
 	return &hcm.HttpConnectionManager{
-		CodecType:  hcm.AUTO,
-		StatPrefix: statPrefix,
-		HttpFilters: []*hcm.HttpFilter{&hcm.HttpFilter{
-			Name: "envoy.router",
-		}},
+		CodecType:      hcm.AUTO,
+		StatPrefix:     statPrefix,
+		RequestTimeout: &requestTimeout,
+		HttpFilters: []*hcm.HttpFilter{
+			{
+				Name: util.Router,
+			},
+			{
+				Name: util.Buffer,
+				ConfigType: &hcm.HttpFilter_TypedConfig{
+					TypedConfig: httpBuffer,
+				},
+			},
+		},
 		UpgradeConfigs: []*hcm.HttpConnectionManager_UpgradeConfig{
 			{
 				UpgradeType: "websocket",
