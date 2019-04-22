@@ -209,10 +209,12 @@ func makeConnectionManager(virtualHosts []route.VirtualHost, statPrefix string) 
 	}
 
 	requestTimeout := 5 * time.Minute
+	idleTimeout := 5 * time.Minute
 	return &hcm.HttpConnectionManager{
 		CodecType:      hcm.AUTO,
 		StatPrefix:     statPrefix,
 		RequestTimeout: &requestTimeout,
+		IdleTimeout:    &idleTimeout,
 		HttpFilters: []*hcm.HttpFilter{
 			{
 				Name: util.Router,
@@ -290,6 +292,8 @@ func makeVirtualHost(k8sCluster *data.K8sCacheStore, namespace string, ingressRu
 func makeRoute(httpPath v1beta1.HTTPIngressPath, namespace string, ingressRule v1beta1.IngressRule) route.Route {
 	perTryTimeout := time.Second * 20
 	numRetries := types.UInt32Value{Value: 1}
+	timeout := time.Minute * 5
+	idletimeout := time.Minute * 5
 
 	return route.Route{
 		Match: route.RouteMatch{
@@ -302,6 +306,8 @@ func makeRoute(httpPath v1beta1.HTTPIngressPath, namespace string, ingressRule v
 				ClusterSpecifier: &route.RouteAction_Cluster{
 					Cluster: getClusterName(namespace, ingressRule.Host, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal),
 				},
+				Timeout:     &timeout,
+				IdleTimeout: &idletimeout,
 				RetryPolicy: &route.RetryPolicy{
 					RetryOn:       "5xx",
 					NumRetries:    &numRetries,
