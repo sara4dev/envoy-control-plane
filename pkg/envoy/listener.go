@@ -10,8 +10,6 @@ import (
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/route"
 	al "github.com/envoyproxy/go-control-plane/envoy/config/accesslog/v2"
 	fal "github.com/envoyproxy/go-control-plane/envoy/config/filter/accesslog/v2"
-	buf "github.com/envoyproxy/go-control-plane/envoy/config/filter/http/buffer/v2"
-	gzip "github.com/envoyproxy/go-control-plane/envoy/config/filter/http/gzip/v2"
 	hcm "github.com/envoyproxy/go-control-plane/envoy/config/filter/network/http_connection_manager/v2"
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
 	"github.com/envoyproxy/go-control-plane/pkg/util"
@@ -192,17 +190,17 @@ func makeConnectionManager(virtualHosts []route.VirtualHost, statPrefix string) 
 		log.Fatalf("failed to convert: %s", err)
 	}
 
-	httpBuffer, err := types.MarshalAny(&buf.Buffer{
-		MaxRequestBytes: &types.UInt32Value{Value: 1024 * 1024 * 1024},
-	})
-
-	if err != nil {
-		log.Fatalf("failed to convert: %s", err)
-	}
-
-	gzip, err := types.MarshalAny(&gzip.Gzip{
-		MemoryLevel: &types.UInt32Value{Value: 9},
-	})
+	//httpBuffer, err := types.MarshalAny(&buf.Buffer{
+	//	MaxRequestBytes: &types.UInt32Value{Value: 1024 * 1024 * 1024},
+	//})
+	//
+	//if err != nil {
+	//	log.Fatalf("failed to convert: %s", err)
+	//}
+	//
+	//gzip, err := types.MarshalAny(&gzip.Gzip{
+	//	MemoryLevel: &types.UInt32Value{Value: 9},
+	//})
 
 	if err != nil {
 		log.Fatalf("failed to convert: %s", err)
@@ -219,18 +217,18 @@ func makeConnectionManager(virtualHosts []route.VirtualHost, statPrefix string) 
 			{
 				Name: util.Router,
 			},
-			{
-				Name: util.Buffer,
-				ConfigType: &hcm.HttpFilter_TypedConfig{
-					TypedConfig: httpBuffer,
-				},
-			},
-			{
-				Name: util.Gzip,
-				ConfigType: &hcm.HttpFilter_TypedConfig{
-					TypedConfig: gzip,
-				},
-			},
+			//{
+			//	Name: util.Buffer,
+			//	ConfigType: &hcm.HttpFilter_TypedConfig{
+			//		TypedConfig: httpBuffer,
+			//	},
+			//},
+			//{
+			//	Name: util.Gzip,
+			//	ConfigType: &hcm.HttpFilter_TypedConfig{
+			//		TypedConfig: gzip,
+			//	},
+			//},
 		},
 		UpgradeConfigs: []*hcm.HttpConnectionManager_UpgradeConfig{
 			{
