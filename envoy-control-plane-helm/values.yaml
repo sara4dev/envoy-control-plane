@@ -1,5 +1,3 @@
-replicaCount: 2
-
 controlPlane:
   image: docker.target.com/kubernetes/envoy-control-plane
   pullPolicy: Always
@@ -50,8 +48,3 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
-
-autoscaler:
-  maxReplicas: 10
-  minReplicas: 3
-  targetCPUUtilizationPercentage: 75

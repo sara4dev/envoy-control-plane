@@ -1,6 +1,6 @@
 #apiVersion: apps/v1
 apiVersion: extensions/v1beta1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: {{ include "envoy-control-plane-helm.fullname" . }}
   labels:
@@ -9,7 +9,10 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 10%
+    type: RollingUpdate
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "envoy-control-plane-helm.name" . }}
