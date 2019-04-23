@@ -31,6 +31,8 @@ fluentd:
       cpu: 100m
       memory: 256Mi
 
+terminationGracePeriod: 305
+
 kubeconfig:
   content: |
     dGVzdAo=

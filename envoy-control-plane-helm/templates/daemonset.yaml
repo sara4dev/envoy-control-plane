@@ -71,6 +71,11 @@ spec:
             httpGet:
               path: /
               port: admin
+          lifecycle:
+            preStop:
+              exec:
+                  # SIGTERM triggers a quick exit; gracefully terminate instead
+                  command: ["/bin/sh", "-c", "sleep {{ .Values.terminationGracePeriod }}"]
           resources:
             {{- toYaml .Values.envoyproxy.resources | nindent 12 }}
           volumeMounts:
