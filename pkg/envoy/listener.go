@@ -245,6 +245,7 @@ func makeConnectionManager(virtualHosts []route.VirtualHost, statPrefix string) 
 		},
 		Tracing: &hcm.HttpConnectionManager_Tracing{
 			OperationName: hcm.EGRESS,
+			Verbose:       true,
 		},
 		AccessLog: []*fal.AccessLog{
 			{

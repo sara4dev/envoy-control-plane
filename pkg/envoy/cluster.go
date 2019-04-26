@@ -49,10 +49,10 @@ func (e *EnvoyCluster) makeGrpcServices() []*core.GrpcService {
 
 func (e *EnvoyCluster) makeEnvoyCluster(cluster string, refreshDelay time.Duration, grpcServices []*core.GrpcService) v2.Cluster {
 	return v2.Cluster{
-		Name:           cluster,
-		ConnectTimeout: time.Second * 5,
-		LbPolicy:       v2.Cluster_ROUND_ROBIN,
-		Type:           v2.Cluster_EDS,
+		Name:                 cluster,
+		ConnectTimeout:       time.Second * 5,
+		LbPolicy:             v2.Cluster_ROUND_ROBIN,
+		ClusterDiscoveryType: &v2.Cluster_Type{Type: v2.Cluster_EDS},
 		EdsClusterConfig: &v2.Cluster_EdsClusterConfig{
 			EdsConfig: &core.ConfigSource{
 				ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
