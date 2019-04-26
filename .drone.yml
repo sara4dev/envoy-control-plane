@@ -126,7 +126,7 @@ pipeline:
       event: push
     image: plugins/docker
     registry: gcr.io/tgt-pe-prod
-      repo: gcr.io/tgt-pe-prod/kubernetes/envoyproxy-fluentd
+    repo: gcr.io/tgt-pe-prod/kubernetes/envoyproxy-fluentd
     dockerfile: fluentd/Dockerfile
     username: _json_key
     secrets:
