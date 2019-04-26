@@ -22,6 +22,10 @@ func (f *fakeSnapshotCache) SetSnapshot(node string, snapshot envoycache.Snapsho
 	return nil
 }
 
+func (f *fakeSnapshotCache) GetSnapshot(node string) (envoycache.Snapshot, error) {
+	return envoycache.Snapshot{}, nil
+}
+
 // ClearSnapshot removes all status and snapshot information associated with a node.
 func (f *fakeSnapshotCache) ClearSnapshot(node string) {
 
