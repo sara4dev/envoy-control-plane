@@ -243,9 +243,9 @@ func makeConnectionManager(virtualHosts []route.VirtualHost, statPrefix string) 
 				VirtualHosts: virtualHosts,
 			},
 		},
-		//Tracing: &hcm.HttpConnectionManager_Tracing{
-		//	OperationName: hcm.EGRESS,
-		//},
+		Tracing: &hcm.HttpConnectionManager_Tracing{
+			OperationName: hcm.EGRESS,
+		},
 		AccessLog: []*fal.AccessLog{
 			{
 				Name: "envoy.file_access_log",
