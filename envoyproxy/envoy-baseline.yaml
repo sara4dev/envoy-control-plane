@@ -53,15 +53,15 @@ static_resources:
           max_requests: 60000000
           max_retries: 50
   - name: jaeger
-      connect_timeout: 1s
-      type: strict_dns
-      lb_policy: round_robin
-      load_assignment:
-        cluster_name: jaeger
-        endpoints:
-          - lb_endpoints:
-              - endpoint:
-                  address:
-                    socket_address:
-                      address: zipkin
-                      port_value: 9411
+    connect_timeout: 1s
+    type: strict_dns
+    lb_policy: round_robin
+    load_assignment:
+      cluster_name: jaeger
+      endpoints:
+        - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: zipkin
+                    port_value: 9411
