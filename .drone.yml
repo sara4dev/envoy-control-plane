@@ -70,7 +70,7 @@ pipeline:
         target: plugin_password
     tag:
       - "test"
-      - "0.0.${DRONE_BUILD_NUMBER}" ]
+      - "0.0.${DRONE_BUILD_NUMBER}"
 
   build-envoyproxy-docker-hq:
     when:
