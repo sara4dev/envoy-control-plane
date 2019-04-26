@@ -5,9 +5,11 @@ admin:
 tracing:
   http:
     name: envoy.zipkin
-    config:
-      collector_cluster: zipkin_cluster
-      collector_endpoint: /api/v1/spans
+    typed_config:
+      "@type": type.googleapis.com/envoy.config.trace.v2.ZipkinConfig
+      collector_cluster: jaeger
+      collector_endpoint: "/api/v1/spans"
+      shared_span_context: false
 dynamic_resources:
   lds_config:
     api_config_source:
@@ -33,7 +35,7 @@ static_resources:
     connect_timeout: 10s
     hosts:
     - socket_address:
-        address: 192.168.2.72
+        address: 192.168.108.247
         port_value: 8080
     http2_protocol_options: { hpack_table_size: 4294967, max_concurrent_streams: 2147483647 }
     per_connection_buffer_limit_bytes: 100000000
@@ -43,18 +45,31 @@ static_resources:
         max_connections: 4096
         max_requests: 4096
         max_pending_requests: 6000
-  - name: zipkin_cluster
-    # type: strict_dns
-    connect_timeout: 10s
-    hosts:
-    - socket_address:
-        address: 192.168.2.72
-        port_value: 9411
-    http2_protocol_options: { hpack_table_size: 4294967, max_concurrent_streams: 2147483647 }
-    per_connection_buffer_limit_bytes: 100000000
-    max_requests_per_connection: 10000
-    circuit_breakers:
-      thresholds:
-        max_connections: 4096
-        max_requests: 4096
-        max_pending_requests: 6000
+  - name: jaeger
+    connect_timeout: 1s
+#    type: strict_dns
+    lb_policy: round_robin
+    load_assignment:
+      cluster_name: jaeger
+      endpoints:
+        - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: 192.168.108.247
+                    port_value: 9411
+#  - name: zipkin_cluster
+#    # type: strict_dns
+#    connect_timeout: 10s
+#    hosts:
+#    - socket_address:
+#        address: 192.168.108.247
+#        port_value: 9411
+#    http2_protocol_options: { hpack_table_size: 4294967, max_concurrent_streams: 2147483647 }
+#    per_connection_buffer_limit_bytes: 100000000
+#    max_requests_per_connection: 10000
+#    circuit_breakers:
+#      thresholds:
+#        max_connections: 4096
+#        max_requests: 4096
+#        max_pending_requests: 6000
