@@ -11,6 +11,8 @@ secrets:
     path: secret/shared/drone/prod-secrets/cache_s3_secret_key
   cache_s3_ca_cert:
     path: secret/shared/drone/prod-secrets/cache_s3_ca_cert
+  gcr_push_tgt_pe_prod:
+    path: secret/shared/tap/drone-secrets/TGT_PE_PROD_DOCKER_PASSWORD
 
 workspace:
   base: /drone
@@ -38,7 +40,7 @@ pipeline:
       - "go test ./pkg/envoy -v -cover"
       - "go build"
 
-  build-envoy-control-plane-docker:
+  build-envoy-control-plane-docker-hq:
     when:
       branch: master
       event: push
@@ -54,7 +56,23 @@ pipeline:
       - "test"
       - "0.0.${DRONE_BUILD_NUMBER}"
 
-  build-envoyproxy-docker:
+  build-envoy-control-plane-docker-gcp:
+    when:
+      branch: master
+      event: push
+    image: plugins/docker
+    registry: gcr.io/tgt-pe-prod
+    repo: gcr.io/tgt-pe-prod/kubernetes/envoy-control-plane
+    dockerfile: Dockerfile
+    username: _json_key
+    secrets:
+      - source: gcr_push_tgt_pe_prod
+        target: plugin_password
+    tag:
+      - "test"
+      - "0.0.${DRONE_BUILD_NUMBER}" ]
+
+  build-envoyproxy-docker-hq:
     when:
       branch: master
       event: push
@@ -70,7 +88,23 @@ pipeline:
       - "test"
       - "0.0.${DRONE_BUILD_NUMBER}"
 
-  build-fluentd-docker:
+  build-envoyproxy-docker-gcp:
+    when:
+      branch: master
+      event: push
+    image: plugins/docker
+    registry: gcr.io/tgt-pe-prod
+    repo: gcr.io/tgt-pe-prod/kubernetes/envoyproxy
+    dockerfile: envoyproxy/Dockerfile
+    username: _json_key
+    secrets:
+      - source: gcr_push_tgt_pe_prod
+        target: plugin_password
+    tag:
+      - "test"
+      - "0.0.${DRONE_BUILD_NUMBER}"
+
+  build-fluentd-docker-hq:
     when:
       branch: master
       event: push
@@ -86,7 +120,23 @@ pipeline:
       - "test"
       - "0.0.${DRONE_BUILD_NUMBER}"
 
-  build-envoy-control-plane-docker-tag:
+  build-fluentd-docker-gcp:
+    when:
+      branch: master
+      event: push
+    image: plugins/docker
+    registry: gcr.io/tgt-pe-prod
+      repo: gcr.io/tgt-pe-prod/kubernetes/envoyproxy-fluentd
+    dockerfile: fluentd/Dockerfile
+    username: _json_key
+    secrets:
+      - source: gcr_push_tgt_pe_prod
+        target: plugin_password
+    tag:
+      - "test"
+      - "0.0.${DRONE_BUILD_NUMBER}"
+
+  build-envoy-control-plane-docker-tag-hq:
     when:
       event: tag
     image: plugins/docker
@@ -101,7 +151,22 @@ pipeline:
       - "latest"
       - "${DRONE_TAG}"
 
-  build-envoyproxy-docker-tag:
+  build-envoy-control-plane-docker-tag-gcp:
+    when:
+      event: tag
+    image: plugins/docker
+    registry: gcr.io/tgt-pe-prod
+    repo: gcr.io/tgt-pe-prod/kubernetes/envoy-control-plane
+    dockerfile: Dockerfile
+    username: _json_key
+    secrets:
+      - source: gcr_push_tgt_pe_prod
+        target: plugin_password
+    tag:
+      - "latest"
+      - "${DRONE_TAG}"
+
+  build-envoyproxy-docker-tag-hq:
     when:
       event: tag
     image: plugins/docker
@@ -116,7 +181,22 @@ pipeline:
       - "latest"
       - "${DRONE_TAG}"
 
-  build-fluentd-docker-tag:
+  build-envoyproxy-docker-tag-gcp:
+    when:
+      event: tag
+    image: plugins/docker
+    registry: gcr.io/tgt-pe-prod
+    repo: gcr.io/tgt-pe-prod/kubernetes/envoyproxy
+    dockerfile: envoyproxy/Dockerfile
+    username: _json_key
+    secrets:
+      - source: gcr_push_tgt_pe_prod
+        target: plugin_password
+    tag:
+      - "latest"
+      - "${DRONE_TAG}"
+
+  build-fluentd-docker-tag-hq:
     when:
       event: tag
     image: plugins/docker
@@ -131,16 +211,20 @@ pipeline:
       - "latest"
       - "${DRONE_TAG}"
 
-#  bubble-bath:
-#    image: docker.target.com/bubble-bath/drone-bubblebath:2
-#    registry_url: https://docker.target.com
-#    repo: kubernetes/envoy-control-plane
-#    comparator: semantic-versioning
-#    keep: 4
-#    registry_username: svkubernetes
-#    secrets:
-#      - source: svkubernetes
-#        target: REGISTRY_PASSWORD
+  build-fluentd-docker-tag-gcp:
+    when:
+      event: tag
+    image: plugins/docker
+    registry: gcr.io/tgt-pe-prod
+    repo: gcr.io/tgt-pe-prod/kubernetes/envoyproxy-fluentd
+    dockerfile: fluentd/Dockerfile
+    username: _json_key
+    secrets:
+      - source: gcr_push_tgt_pe_prod
+        target: plugin_password
+    tag:
+      - "latest"
+      - "${DRONE_TAG}"
 
   validate-chart:
     image: alpine/helm
