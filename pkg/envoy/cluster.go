@@ -4,6 +4,7 @@ import (
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2"
 	"github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
+	"github.com/gogo/protobuf/types"
 	"k8s.io/api/extensions/v1beta1"
 	"time"
 )
@@ -49,10 +50,11 @@ func (e *EnvoyCluster) makeGrpcServices() []*core.GrpcService {
 
 func (e *EnvoyCluster) makeEnvoyCluster(cluster string, refreshDelay time.Duration, grpcServices []*core.GrpcService) v2.Cluster {
 	return v2.Cluster{
-		Name:                 cluster,
-		ConnectTimeout:       time.Second * 5,
-		LbPolicy:             v2.Cluster_ROUND_ROBIN,
-		ClusterDiscoveryType: &v2.Cluster_Type{Type: v2.Cluster_EDS},
+		Name:                          cluster,
+		ConnectTimeout:                time.Second * 5,
+		PerConnectionBufferLimitBytes: &types.UInt32Value{Value: 1024 * 1024 * 100},
+		LbPolicy:                      v2.Cluster_ROUND_ROBIN,
+		ClusterDiscoveryType:          &v2.Cluster_Type{Type: v2.Cluster_EDS},
 		EdsClusterConfig: &v2.Cluster_EdsClusterConfig{
 			EdsConfig: &core.ConfigSource{
 				ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{

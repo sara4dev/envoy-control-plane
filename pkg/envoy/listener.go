@@ -95,7 +95,8 @@ func (e *EnvoyCluster) makeEnvoyListener(name string, port uint32, filterChains 
 				},
 			},
 		},
-		FilterChains: filterChains,
+		FilterChains:                  filterChains,
+		PerConnectionBufferLimitBytes: &types.UInt32Value{Value: 1024 * 1024 * 100},
 	}
 }
 
