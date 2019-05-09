@@ -298,7 +298,7 @@ func newKubeClient(kubeconfigPath string, context string) (kubernetes.Interface,
 	server := apiConfig.Clusters[cluster].Server
 	config, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath},
-		&clientcmd.ConfigOverrides{AuthInfo: api.AuthInfo{Token: token}, ClusterInfo: api.Cluster{Server: server}}).ClientConfig()
+		&clientcmd.ConfigOverrides{AuthInfo: api.AuthInfo{Token: token}, ClusterInfo: api.Cluster{Server: server, InsecureSkipTLSVerify: true}}).ClientConfig()
 	if err != nil {
 		return nil, fmt.Errorf("error creating client config: %s", err)
 	}
