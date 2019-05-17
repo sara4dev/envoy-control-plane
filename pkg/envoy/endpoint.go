@@ -59,8 +59,6 @@ func (e *EnvoyCluster) makeEnvoyEndpoints(envoyEndpointsChan chan []cache.Resour
 							node := nodeObj.(*v1.Node)
 							lbEndpoint := e.makeEnvoyLbEndpoint(node, servicePort)
 							lbEndpoints = append(lbEndpoints, lbEndpoint)
-							//TODO: Debuugging, add only one node as the endpoint.
-							break
 						}
 					}
 					localityLbEndpoint = e.makeEnvoyLocalityLbEndpoint(k8sCluster, lbEndpoints)
