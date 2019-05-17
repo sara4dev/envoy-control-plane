@@ -91,6 +91,9 @@ func (e *EnvoyCluster) makeEnvoyLbEndpoint(node *v1.Node, servicePort v1.Service
 	return endpoint.LbEndpoint{
 		HostIdentifier: &endpoint.LbEndpoint_Endpoint{
 			Endpoint: &endpoint.Endpoint{
+				//HealthCheckConfig: &endpoint.Endpoint_HealthCheckConfig{
+				//	PortValue: uint32(servicePort.NodePort),
+				//},
 				Address: &core.Address{
 					Address: &core.Address_SocketAddress{
 						SocketAddress: &core.SocketAddress{

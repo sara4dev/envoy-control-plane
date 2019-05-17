@@ -49,12 +49,26 @@ func (e *EnvoyCluster) makeGrpcServices() []*core.GrpcService {
 }
 
 func (e *EnvoyCluster) makeEnvoyCluster(cluster string, refreshDelay time.Duration, grpcServices []*core.GrpcService) v2.Cluster {
+	healthChecks := []*core.HealthCheck{}
+	timeout := 10 * time.Second
+	interval := 15 * time.Second
+	healthCheck := &core.HealthCheck{
+		Timeout:            &timeout,
+		Interval:           &interval,
+		UnhealthyThreshold: &types.UInt32Value{Value: 2},
+		HealthyThreshold:   &types.UInt32Value{Value: 2},
+		HealthChecker: &core.HealthCheck_TcpHealthCheck_{
+			TcpHealthCheck: &core.HealthCheck_TcpHealthCheck{},
+		},
+	}
+	healthChecks = append(healthChecks, healthCheck)
 	return v2.Cluster{
 		Name:                          cluster,
 		ConnectTimeout:                time.Second * 5,
 		PerConnectionBufferLimitBytes: &types.UInt32Value{Value: 1024 * 1024 * 100},
 		LbPolicy:                      v2.Cluster_ROUND_ROBIN,
 		ClusterDiscoveryType:          &v2.Cluster_Type{Type: v2.Cluster_EDS},
+		HealthChecks:                  healthChecks,
 		EdsClusterConfig: &v2.Cluster_EdsClusterConfig{
 			EdsConfig: &core.ConfigSource{
 				ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
