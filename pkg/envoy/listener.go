@@ -55,7 +55,7 @@ func (e *EnvoyCluster) makeEnvoyHttpListerners(envoyHttpListenersChan chan []cac
 			// add it to HTTP listener only if ingress has no TLS
 			if len(ingress.Spec.TLS) == 0 {
 				for _, ingressRule := range ingress.Spec.Rules {
-					virtualHost := makeVirtualHost(k8sCluster, ingress.Namespace, ingressRule, "80")
+					virtualHost := makeVirtualHost(k8sCluster, ingress, ingressRule, "80")
 					existingVirtualHost := virtualHostsMap[ingressRule.Host]
 					if existingVirtualHost.Name != "" {
 						existingVirtualHost.Routes = append(existingVirtualHost.Routes, virtualHost.Routes...)
@@ -134,7 +134,7 @@ func (e *EnvoyCluster) makeEnvoyHttpsListerners(envoyHttpsListenersChan chan []c
 				for _, ingressRule := range ingress.Spec.Rules {
 
 					virtualHosts := []route.VirtualHost{
-						makeVirtualHost(k8sCluster, ingress.Namespace, ingressRule, "443"),
+						makeVirtualHost(k8sCluster, ingress, ingressRule, "443"),
 					}
 					httpConnectionManager := makeConnectionManager(virtualHosts, "ingress_https")
 					httpConfig, err := types.MarshalAny(httpConnectionManager)
@@ -269,15 +269,15 @@ func findService(k8sCluster *data.K8sCacheStore, namespace string, serviceName s
 	return nil
 }
 
-func makeVirtualHost(k8sCluster *data.K8sCacheStore, namespace string, ingressRule v1beta1.IngressRule, portNumber string) route.VirtualHost {
+func makeVirtualHost(k8sCluster *data.K8sCacheStore, ingress *v1beta1.Ingress, ingressRule v1beta1.IngressRule, portNumber string) route.VirtualHost {
 
 	routes := []route.Route{}
 
 	for _, httpPath := range ingressRule.HTTP.Paths {
-		service := findService(k8sCluster, namespace, httpPath.Backend.ServiceName)
+		service := findService(k8sCluster, ingress.Namespace, httpPath.Backend.ServiceName)
 		if service != nil {
 			if service.Spec.Type == v1.ServiceTypeNodePort {
-				route := makeRoute(httpPath, namespace, ingressRule)
+				route := makeRoute(httpPath, ingress, ingressRule)
 				routes = append(routes, route)
 			}
 		}
@@ -291,11 +291,22 @@ func makeVirtualHost(k8sCluster *data.K8sCacheStore, namespace string, ingressRu
 	return virtualHost
 }
 
-func makeRoute(httpPath v1beta1.HTTPIngressPath, namespace string, ingressRule v1beta1.IngressRule) route.Route {
+func makeRoute(httpPath v1beta1.HTTPIngressPath, ingress *v1beta1.Ingress, ingressRule v1beta1.IngressRule) route.Route {
 	//perTryTimeout := time.Second * 20
 	//numRetries := types.UInt32Value{Value: 1}
 	timeout := time.Minute * 5
 	idletimeout := time.Minute * 5
+	hashPolicy := getAnnotation(ingress, ANNOTATIONS_ROUTEACTION_ROUTE_ENVOYPROXY_HASHPOLICY, "")
+	routeAction_HashPolicy := &route.RouteAction_HashPolicy{}
+	if strings.ToLower(hashPolicy) == "cookie" {
+		routeAction_HashPolicy.PolicySpecifier = &route.RouteAction_HashPolicy_Cookie_{
+			Cookie: &route.RouteAction_HashPolicy_Cookie{
+				Name: "hashpoliy",
+			},
+		}
+	}
+	hashPolicies := []*route.RouteAction_HashPolicy{}
+	hashPolicies = append(hashPolicies, routeAction_HashPolicy)
 
 	return route.Route{
 		Match: route.RouteMatch{
@@ -306,10 +317,11 @@ func makeRoute(httpPath v1beta1.HTTPIngressPath, namespace string, ingressRule v
 		Action: &route.Route_Route{
 			Route: &route.RouteAction{
 				ClusterSpecifier: &route.RouteAction_Cluster{
-					Cluster: getClusterName(namespace, ingressRule.Host, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal),
+					Cluster: getClusterName(ingress.Namespace, ingressRule.Host, httpPath.Backend.ServiceName, httpPath.Backend.ServicePort.IntVal),
 				},
 				Timeout:     &timeout,
 				IdleTimeout: &idletimeout,
+				HashPolicy:  hashPolicies,
 				//RetryPolicy: &route.RetryPolicy{
 				//	RetryOn:       "5xx",
 				//	NumRetries:    &numRetries,

@@ -148,7 +148,7 @@ func (c *K8sCluster) watchObjects(resyncPeriod time.Duration, objType runtime.Ob
 	*informer = cache.NewSharedInformer(lw, objType, resyncPeriod)
 	*cacheStore = (*informer).GetStore()
 	go (*informer).Run(wait.NeverStop)
-	log.Infof("waiting to sync ingress for cluster: %v", c.Context)
+	log.Infof("waiting to sync %T for cluster: %v", objType, c.Context)
 	for !(*informer).HasSynced() {
 	}
 	*initialObjects = (*cacheStore).ListKeys()

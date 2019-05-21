@@ -35,7 +35,7 @@ static_resources:
     connect_timeout: 10s
     hosts:
     - socket_address:
-        address: 192.168.108.247
+        address: 192.168.103.108
         port_value: 8080
     http2_protocol_options: { hpack_table_size: 4294967, max_concurrent_streams: 2147483647 }
     per_connection_buffer_limit_bytes: 100000000
@@ -56,14 +56,14 @@ static_resources:
             - endpoint:
                 address:
                   socket_address:
-                    address: 192.168.108.247
+                    address: 192.168.103.108
                     port_value: 9411
 #  - name: zipkin_cluster
 #    # type: strict_dns
 #    connect_timeout: 10s
 #    hosts:
 #    - socket_address:
-#        address: 192.168.108.247
+#        address: 192.168.103.108
 #        port_value: 9411
 #    http2_protocol_options: { hpack_table_size: 4294967, max_concurrent_streams: 2147483647 }
 #    per_connection_buffer_limit_bytes: 100000000
