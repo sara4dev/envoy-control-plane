@@ -85,14 +85,22 @@ func (e *EnvoyCluster) makeEnvoyCluster(cluster string, ing *v1beta1.Ingress, re
 	}
 
 	thresholds := []*v2cluster.CircuitBreakers_Thresholds{}
-	threshold := &v2cluster.CircuitBreakers_Thresholds{
+	defaultThreshold := &v2cluster.CircuitBreakers_Thresholds{
 		Priority:           core.RoutingPriority_DEFAULT,
 		MaxConnections:     &types.UInt32Value{Value: uint32(maxConnections)},
 		MaxPendingRequests: &types.UInt32Value{Value: uint32(maxPendingRequests)},
 		MaxRequests:        &types.UInt32Value{Value: uint32(maxRequests)},
 		MaxRetries:         &types.UInt32Value{Value: uint32(maxRetries)},
 	}
-	thresholds = append(thresholds, threshold)
+	thresholds = append(thresholds, defaultThreshold)
+	highThreshold := &v2cluster.CircuitBreakers_Thresholds{
+		Priority:           core.RoutingPriority_HIGH,
+		MaxConnections:     &types.UInt32Value{Value: uint32(maxConnections)},
+		MaxPendingRequests: &types.UInt32Value{Value: uint32(maxPendingRequests)},
+		MaxRequests:        &types.UInt32Value{Value: uint32(maxRequests)},
+		MaxRetries:         &types.UInt32Value{Value: uint32(maxRetries)},
+	}
+	thresholds = append(thresholds, highThreshold)
 	circuitBreakers := &v2cluster.CircuitBreakers{
 		Thresholds: thresholds,
 	}

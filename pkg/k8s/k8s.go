@@ -84,7 +84,7 @@ func (c *K8sCluster) startK8sControllers(kubeConfigPath string, envoyCluster *en
 		return err
 	}
 	watchNamespaces := v1.NamespaceAll
-	//watchNamespaces = "kube-system"
+	//watchNamespaces := "kube-system"
 	c.watchObjects(resyncPeriod, &v1beta1.Ingress{}, envoyCluster, watchNamespaces)
 	c.watchObjects(resyncPeriod, &v1.Service{}, envoyCluster, watchNamespaces)
 	c.watchObjects(resyncPeriod, &v1.Secret{}, envoyCluster, watchNamespaces)

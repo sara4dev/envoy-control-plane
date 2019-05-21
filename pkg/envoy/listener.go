@@ -297,16 +297,17 @@ func makeRoute(httpPath v1beta1.HTTPIngressPath, ingress *v1beta1.Ingress, ingre
 	timeout := time.Minute * 5
 	idletimeout := time.Minute * 5
 	hashPolicy := getAnnotation(ingress, ANNOTATIONS_ROUTEACTION_ROUTE_ENVOYPROXY_HASHPOLICY, "")
-	routeAction_HashPolicy := &route.RouteAction_HashPolicy{}
+	var hashPolicies []*route.RouteAction_HashPolicy = nil
 	if strings.ToLower(hashPolicy) == "cookie" {
+		routeAction_HashPolicy := &route.RouteAction_HashPolicy{}
 		routeAction_HashPolicy.PolicySpecifier = &route.RouteAction_HashPolicy_Cookie_{
 			Cookie: &route.RouteAction_HashPolicy_Cookie{
 				Name: "hashpoliy",
 			},
 		}
+		hashPolicies = []*route.RouteAction_HashPolicy{}
+		hashPolicies = append(hashPolicies, routeAction_HashPolicy)
 	}
-	hashPolicies := []*route.RouteAction_HashPolicy{}
-	hashPolicies = append(hashPolicies, routeAction_HashPolicy)
 
 	return route.Route{
 		Match: route.RouteMatch{
