@@ -52,16 +52,13 @@ func (e *EnvoyCluster) makeEnvoyHttpListerners(envoyHttpListenersChan chan []cac
 	for _, k8sCluster := range e.K8sCacheStoreMap {
 		for _, ingressObj := range k8sCluster.IngressCacheStore.List() {
 			ingress := ingressObj.(*v1beta1.Ingress)
-			// add it to HTTP listener only if ingress has no TLS
-			if len(ingress.Spec.TLS) == 0 {
-				for _, ingressRule := range ingress.Spec.Rules {
-					virtualHost := makeVirtualHost(k8sCluster, ingress, ingressRule, "80")
-					existingVirtualHost := virtualHostsMap[ingressRule.Host]
-					if existingVirtualHost.Name != "" {
-						existingVirtualHost.Routes = append(existingVirtualHost.Routes, virtualHost.Routes...)
-					} else {
-						virtualHostsMap[ingressRule.Host] = virtualHost
-					}
+			for _, ingressRule := range ingress.Spec.Rules {
+				virtualHost := makeVirtualHost(k8sCluster, ingress, ingressRule, "80")
+				existingVirtualHost := virtualHostsMap[ingressRule.Host]
+				if existingVirtualHost.Name != "" {
+					existingVirtualHost.Routes = append(existingVirtualHost.Routes, virtualHost.Routes...)
+				} else {
+					virtualHostsMap[ingressRule.Host] = virtualHost
 				}
 			}
 		}
