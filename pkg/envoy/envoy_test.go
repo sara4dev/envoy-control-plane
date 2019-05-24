@@ -255,7 +255,7 @@ func TestMakeEnvoyEndpoints_namespace1_http_cluster1_ingress1_service1_80(t *tes
 	for _, envoyEndpointObj := range envoyEndpoints {
 		envoyEndpoint := envoyEndpointObj.(*v2.ClusterLoadAssignment)
 		//http-ingress1.cluster1.k8s.io
-		if envoyEndpoint.ClusterName == "namespace1:http-ingress1.cluster1.k8s.io:service1:80" {
+		if envoyEndpoint.ClusterName == "namespace1_http-ingress1-cluster1-k8s-io_service1_80" {
 			matchedTestCluster = true
 			// only endpoint for cluster 1 should be created
 			if len(envoyEndpoint.Endpoints) > 1 {
@@ -282,7 +282,7 @@ func TestMakeEnvoyEndpoints_namespace1_http_cluster2_ingress1_service1_80(t *tes
 	matchedTestCluster := false
 	for _, envoyEndpointObj := range envoyEndpoints {
 		envoyEndpoint := envoyEndpointObj.(*v2.ClusterLoadAssignment)
-		if envoyEndpoint.ClusterName == "namespace1:http-ingress1.cluster2.k8s.io:service1:80" {
+		if envoyEndpoint.ClusterName == "namespace1_http-ingress1-cluster2-k8s-io_service1_80" {
 			matchedTestCluster = true
 			// only endpoint for cluster 2 should be created
 			if len(envoyEndpoint.Endpoints) > 1 {
@@ -309,7 +309,7 @@ func TestMakeEnvoyEndpoints_namespace2_http_cross_cluster_ingress_service2_80(t 
 	for _, envoyEndpointObj := range envoyEndpoints {
 		envoyEndpoint := envoyEndpointObj.(*v2.ClusterLoadAssignment)
 		//endpoint for cluster cluster1/2: namespace2:http-cross-cluster-ingress.k8s.io:service2:80 should be multi cluster ingress
-		if envoyEndpoint.ClusterName == "namespace2:http-cross-cluster-ingress.k8s.io:service2:80" {
+		if envoyEndpoint.ClusterName == "namespace2_http-cross-cluster-ingress-k8s-io_service2_80" {
 			matchedTestCluster = true
 			if len(envoyEndpoint.Endpoints) != 2 {
 				t.Error("Unexpected number of makeEnvoyCluster Endpoints")
@@ -341,7 +341,7 @@ func TestMakeEnvoyEndpoints_namespace6_http_clusterip_service_ingress_service6_8
 	for _, envoyEndpointObj := range envoyEndpoints {
 		envoyEndpoint := envoyEndpointObj.(*v2.ClusterLoadAssignment)
 		//endpoint for cluster cluster1: namespace6:http-clusterip-service-ingress.cluster1.k8s.io:service6:80 should be 0 as it is not a nodeport service
-		if envoyEndpoint.ClusterName == "namespace6:http-clusterip-service-ingress.cluster1.k8s.io:service6:80" {
+		if envoyEndpoint.ClusterName == "namespace6_http-clusterip-service-ingress-cluster1-k8s-io_service6_80" {
 			matchedTestCluster = true
 			for _, endPoint := range envoyEndpoint.Endpoints {
 				if len(endPoint.LbEndpoints) != 0 {
