@@ -166,5 +166,5 @@ func (e *EnvoyCluster) CreateEnvoySnapshot() {
 }
 
 func getClusterName(k8sNamespace string, k8singressHost string, k8sServiceName string, k8sServicePort int32) string {
-	return fmt.Sprintf("%s_%s_%s_%d", k8sNamespace, strings.ReplaceAll(k8singressHost, ".", "-"), k8sServiceName, k8sServicePort)
+	return fmt.Sprintf("%s_%s_%s_%d", k8sNamespace, strings.Replace(k8singressHost, ".", "-", -1), k8sServiceName, k8sServicePort)
 }
