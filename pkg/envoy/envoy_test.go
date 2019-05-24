@@ -382,7 +382,7 @@ func TestMakeEnvoyListeners_http(t *testing.T) {
 				t.Error("Error in unmarshalling HttpConnectionManager")
 			}
 			httpConnectionManagerRouteConfig := httpConnectionManager.RouteSpecifier.(*hcm.HttpConnectionManager_RouteConfig)
-			if len(httpConnectionManagerRouteConfig.RouteConfig.VirtualHosts) != 8 {
+			if len(httpConnectionManagerRouteConfig.RouteConfig.VirtualHosts) != 11 {
 				t.Error("Unexpected number of makeEnvoyCluster HTTP Virtual Hosts")
 			}
 
