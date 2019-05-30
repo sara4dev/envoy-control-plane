@@ -16,7 +16,7 @@ items:
         paths:
         - backend:
             serviceName: service1
-            servicePort: 80
+            servicePort: 8080
           path: /
 - apiVersion: extensions/v1beta1
   kind: Ingress
@@ -30,7 +30,7 @@ items:
           paths:
             - backend:
                 serviceName: service2
-                servicePort: 80
+                servicePort: 8080
               path: /
 - apiVersion: extensions/v1beta1
   kind: Ingress

@@ -55,10 +55,12 @@ func (e *EnvoyCluster) makeEnvoyEndpoints(envoyEndpointsChan chan []cache.Resour
 					lbEndpoints := []endpoint.LbEndpoint{}
 					localityLbEndpoint := endpoint.LocalityLbEndpoints{}
 					for _, servicePort := range service.Spec.Ports {
-						for _, nodeObj := range k8sCluster.NodeCacheStore.List() {
-							node := nodeObj.(*v1.Node)
-							lbEndpoint := e.makeEnvoyLbEndpoint(node, servicePort)
-							lbEndpoints = append(lbEndpoints, lbEndpoint)
+						if servicePort.Port == k8sService.port {
+							for _, nodeObj := range k8sCluster.NodeCacheStore.List() {
+								node := nodeObj.(*v1.Node)
+								lbEndpoint := e.makeEnvoyLbEndpoint(node, servicePort)
+								lbEndpoints = append(lbEndpoints, lbEndpoint)
+							}
 						}
 					}
 					localityLbEndpoint = e.makeEnvoyLocalityLbEndpoint(k8sCluster, lbEndpoints)
