@@ -4,6 +4,8 @@
 Multi cluster Ingress controller implementation using envoyproxy
 
 * [Overview](#overview)
+    * [Multi-cluster ingress](#multi-cluster-ingress)
+    * [Cross Region Failover](#cross-region-failover)
 * [Annotations](#annotations)
   
 
