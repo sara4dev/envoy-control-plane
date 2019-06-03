@@ -72,7 +72,12 @@ spec:
             preStop:
               exec:
                   # SIGTERM triggers a quick exit; gracefully terminate instead
-                  command: ["/bin/sh", "-c", "sleep {{ .Values.terminationGracePeriod }}"]
+                  command:
+                    - "sh"
+                    - "-c"
+                    - >
+                      wget -qO- --post-data='' http://localhost:9001/healthcheck/fail
+                      /bin/sleep", "{{ .Values.terminationGracePeriod }}
           resources:
             {{- toYaml .Values.envoyproxy.resources | nindent 12 }}
           volumeMounts:

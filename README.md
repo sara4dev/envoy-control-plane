@@ -11,7 +11,7 @@ Multi cluster Ingress controller implementation using envoyproxy
 
 ## Overview
 
-Watches Ingress objects from multiple kubernetes clusters and forms a single upstream `cluster` in envoy.
+Watches `ingress` objects from multiple kubernetes clusters and forms a single upstream `cluster` in envoy.
 
 ![](docs/images/multi-cluster-ingress-envoy-control-plane.jpg)
 
