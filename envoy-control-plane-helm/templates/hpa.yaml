@@ -1,0 +1,17 @@
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+    name: {{ include "envoy-control-plane-helm.fullname" . }}
+    namespace: '{{.Release.Namespace}}'
+    labels:
+        chart: '{{.Chart.Name}}-{{.Chart.Version}}'
+        heritage: '{{.Release.Service}}'
+        release: '{{.Release.Name}}'
+spec:
+    maxReplicas: {{.Values.autoscaler.maxReplicas}}
+    minReplicas: {{.Values.autoscaler.minReplicas}}
+    scaleTargetRef:
+        apiVersion: extensions/v1beta1
+        kind: Deployment
+        name: {{ include "envoy-control-plane-helm.fullname" . }}
+    targetCPUUtilizationPercentage: {{.Values.autoscaler.targetCPUUtilizationPercentage}}
