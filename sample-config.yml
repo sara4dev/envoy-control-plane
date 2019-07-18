@@ -1,7 +1,7 @@
 kubeConfigPath: "/Users/z0027kp/.kube/config"
 defaultTlsSecret: "kube-system/haproxy-ingress-np-tls-secret"
 logLevel: "info"
-zone: "tte"
+zone: "central1"
 clusters:
   - context: "gcp-central1-bigoli2-test"
     zone: "central1"
