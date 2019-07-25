@@ -6,12 +6,14 @@ Multi cluster Ingress controller implementation using envoyproxy
 * [Overview](#overview)
     * [Multi-cluster ingress](#multi-cluster-ingress)
     * [Cross Region Failover](#cross-region-failover)
+* [Getting Started](#getting-started)
+    
 * [Annotations](#annotations)
   
 
 ## Overview
 
-Watches `ingress` objects from multiple kubernetes clusters and forms a single upstream `cluster` in envoy.
+Watches `ingress` objects from multiple kubernetes clusters and forms a single upstream `cluster` in envoy. Endpoints are <<NODE IP>>:<<NODE PORT>> of each service.
 
 ![](docs/images/multi-cluster-ingress-envoy-control-plane.jpg)
 
@@ -29,7 +31,12 @@ For each Service you are planning to use in the multi-cluster ingress, it must b
 
 ### Cross Region Failover
 
-When clusters from different regions are added, envoy `endpoints` will have k8s worker nodes from both the regions, with highest priority to the region in which envoy is running. If the pods fail in that region it will fall back to other region. Here's a doc on how envoy priority works - https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/load_balancing/priority#priority-levels  
+When clusters from different regions are added, envoy `endpoints` will have k8s worker nodes from both the regions, with highest priority to the region in which envoy is running. If the pods fail in that region it will fall back to other region. Here's a doc on how envoy priority works - https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/load_balancing/priority#priority-levels
+
+
+## Getting Started
+
+  
 
 ## Annotations
 
