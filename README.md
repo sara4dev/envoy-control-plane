@@ -13,7 +13,7 @@ Multi cluster Ingress controller implementation using envoyproxy
 
 ## Overview
 
-Watches `ingress` objects from multiple kubernetes clusters and forms a single upstream `cluster` in envoy. Endpoints are <<NODE IP>>:<<NODE PORT>> of each service.
+Watches `ingress` objects from multiple kubernetes clusters and forms a single upstream `cluster` in envoy. Endpoints are `NODE_IP:NODE_PORT` of each service.
 
 ![](docs/images/multi-cluster-ingress-envoy-control-plane.jpg)
 
@@ -36,6 +36,7 @@ When clusters from different regions are added, envoy `endpoints` will have k8s 
 
 ## Getting Started
 
+`helm install envoy-control-plane-helm`
   
 
 ## Annotations
